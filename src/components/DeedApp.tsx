@@ -28,7 +28,8 @@ type StepType =
 
 interface Step { type: StepType; partnerIdx?: number }
 
-interface ChatMsg { role: 'bot' | 'user'; text: string; isUpload?: boolean }
+interface ChatMsg { role: 'bot' | 'user'; text: string; snapIdx?: number }
+interface Snapshot { step: Step; data: DeedData; msgCount: number }
 
 const PRIMARY = '#01334c';
 
@@ -147,6 +148,7 @@ export default function DeedApp() {
     partners: [], businessObjective: '',
   });
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [step, setStep] = useState<Step>({ type: 'num_partners' });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -321,12 +323,35 @@ export default function DeedApp() {
     }, ns.type === 'firm_name' ? 800 : 0);
   };
 
+  const handleEdit = (snapIdx: number) => {
+    const snap = snapshots[snapIdx];
+    if (!snap) return;
+    // Restore step & data to before that answer was given
+    setStep(snap.step);
+    setData(snap.data);
+    // Trim messages back to just before the user message
+    setMessages(prev => prev.slice(0, snap.msgCount));
+    // Trim snapshots to before this one
+    setSnapshots(prev => prev.slice(0, snapIdx));
+    // Pre-fill input with the old answer text
+    const oldMsg = messages.find(m => m.snapIdx === snapIdx);
+    setInput(oldMsg?.text || '');
+    // Restore OCR mode if that step needed it
+    if (snap.step.type === 'partner_aadhaar') setOcrMode('AADHAAR');
+    else if (snap.step.type === 'partner_pan') setOcrMode('PAN');
+    else setOcrMode(null);
+  };
+
   const handleSend = async () => {
     const v = input.trim();
     if (!v || loading || step.type === 'done' || step.type === 'generating') return;
     setInput('');
     setOcrMode(null);
-    setMessages(prev => [...prev, { role: 'user', text: v }]);
+    // Save snapshot BEFORE processing so we can roll back later
+    const snapIdx = snapshots.length;
+    const snap: Snapshot = { step, data, msgCount: messages.length };
+    setSnapshots(prev => [...prev, snap]);
+    setMessages(prev => [...prev, { role: 'user', text: v, snapIdx }]);
     setLoading(true);
     await processAnswer(v);
     setLoading(false);
@@ -427,16 +452,34 @@ export default function DeedApp() {
               {msg.role === 'bot' && (
                 <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#d4a843', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', flexShrink: 0 }}>⚖</div>
               )}
-              <div style={{
-                maxWidth: '85%', padding: '9px 12px',
-                borderRadius: msg.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
-                background: msg.role === 'user' ? '#d4a843' : '#1e2545',
-                color: msg.role === 'user' ? '#12122a' : '#c8d0df',
-                fontSize: '11.5px', lineHeight: 1.6,
-                fontWeight: msg.role === 'user' ? 700 : 'normal' as any,
-                border: msg.role === 'bot' ? '1px solid #2a3560' : 'none',
-                whiteSpace: 'pre-wrap',
-              }}>{msg.text}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: '3px', maxWidth: '85%' }}>
+                <div style={{
+                  padding: '9px 12px',
+                  borderRadius: msg.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                  background: msg.role === 'user' ? '#d4a843' : '#1e2545',
+                  color: msg.role === 'user' ? '#12122a' : '#c8d0df',
+                  fontSize: '11.5px', lineHeight: 1.6,
+                  fontWeight: msg.role === 'user' ? 700 : 'normal' as any,
+                  border: msg.role === 'bot' ? '1px solid #2a3560' : 'none',
+                  whiteSpace: 'pre-wrap',
+                }}>{msg.text}</div>
+                {msg.role === 'user' && msg.snapIdx !== undefined && !loading && step.type !== 'done' && (
+                  <button
+                    onClick={() => handleEdit(msg.snapIdx!)}
+                    title="Edit this answer"
+                    style={{
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: '#4a5572', fontSize: '10px', padding: '1px 4px',
+                      display: 'flex', alignItems: 'center', gap: '3px',
+                      transition: 'color 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#d4a843')}
+                    onMouseLeave={e => (e.currentTarget.style.color = '#4a5572')}
+                  >
+                    ✏️ <span style={{ fontSize: '9.5px' }}>Edit</span>
+                  </button>
+                )}
+              </div>
             </div>
           ))}
           {loading && (
