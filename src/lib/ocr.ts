@@ -1,5 +1,5 @@
-// OCR is now handled server-side via /api/ocr (Groq llama-4-scout vision model)
-// This file only exposes the client-side helper that sends the image to the server.
+// OCR via Groq Vision API (server-side /api/ocr)
+// Supports: JPEG, PNG, WebP, HEIC, BMP, GIF, TIFF, and PDF (renders page 1)
 
 export interface PartnerOCR {
   name: string;
@@ -11,40 +11,77 @@ export interface PartnerOCR {
   pan: string;
 }
 
-function fileToBase64(file: File): Promise<string> {
+// ─── PDF → PNG conversion  (client-side, uses pdfjs-dist) ────────────────────
+
+async function pdfToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
+  // Dynamically import pdfjs-dist to avoid SSR issues
+  const pdfjsLib = await import('pdfjs-dist');
+
+  // Point the worker at the bundled worker file via CDN (no extra bundler config needed)
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const page = await pdf.getPage(1); // only first page needed for ID cards
+
+  // Scale 2× for higher resolution → better OCR accuracy
+  const viewport = page.getViewport({ scale: 2.5 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  const ctx = canvas.getContext('2d')!;
+  await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+
+  const dataUrl = canvas.toDataURL('image/png');
+  return { base64: dataUrl.split(',')[1], mimeType: 'image/png' };
+}
+
+// ─── Generic file → base64  ───────────────────────────────────────────────────
+
+async function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    return pdfToBase64(file);
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Strip the data URL prefix (e.g. "data:image/jpeg;base64,")
-      resolve(result.split(',')[1]);
+      const mimeType = file.type || 'image/jpeg';
+      resolve({ base64: result.split(',')[1], mimeType });
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
+// ─── Public OCR functions ─────────────────────────────────────────────────────
+
 export async function ocrAadhaar(file: File): Promise<Partial<PartnerOCR>> {
-  const imageBase64 = await fileToBase64(file);
+  const { base64, mimeType } = await fileToBase64(file);
   const res = await fetch('/api/ocr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64, mimeType: file.type, docType: 'aadhaar' }),
+    body: JSON.stringify({ imageBase64: base64, mimeType, docType: 'aadhaar' }),
   });
   const { data } = await res.json();
   return data as Partial<PartnerOCR>;
 }
 
 export async function ocrPAN(file: File): Promise<Partial<PartnerOCR>> {
-  const imageBase64 = await fileToBase64(file);
+  const { base64, mimeType } = await fileToBase64(file);
   const res = await fetch('/api/ocr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64, mimeType: file.type, docType: 'pan' }),
+    body: JSON.stringify({ imageBase64: base64, mimeType, docType: 'pan' }),
   });
   const { data } = await res.json();
   return data as Partial<PartnerOCR>;
 }
+
+// ─── Deed date helper ─────────────────────────────────────────────────────────
 
 export function todayAsDeedDate(): string {
   const d = new Date();

@@ -459,7 +459,7 @@ export default function DeedApp() {
                 <div style={{ fontSize: '12px', color: '#d4a843', fontWeight: 700, marginBottom: '8px' }}>
                   {ocrMode === 'AADHAAR' ? '🪪 Aadhaar Card' : '📋 PAN Card'} — Upload image to auto-fill
                 </div>
-                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+                <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf,.heic,.heif,.tiff,.tif" style={{ display: 'none' }}
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleOCRUpload(f, ocrMode!); }} />
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button onClick={() => fileRef.current?.click()}
