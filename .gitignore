@@ -21,3 +21,8 @@ Thumbs.db
 
 # Astro
 .astro/
+
+# Environment variables — never commit secrets
+.env
+.env.*
+.env.local
