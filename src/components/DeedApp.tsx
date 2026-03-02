@@ -13,6 +13,7 @@ interface Partner {
 }
 
 interface DeedData {
+  numPartners?: number;
   executionDate: string; businessName: string; natureOfBusiness: string;
   durationType: string; durationStartDate: string; registeredAddress: string;
   partners: Partner[]; businessObjective: string;
@@ -210,8 +211,14 @@ export default function DeedApp() {
 
       if (res.extractedData) {
          let newData = { ...data, ...res.extractedData };
+         
+         // Phase 1: If AI extracted numPartners but array isn't sized yet, initialize it
+         if (res.extractedData.numPartners && newData.partners.length !== res.extractedData.numPartners) {
+             newData.partners = Array.from({ length: res.extractedData.numPartners }, emptyPartner);
+         }
+
          if (res.extractedData.partners) {
-             const mergedPartners = [...data.partners];
+             const mergedPartners = [...newData.partners];
              res.extractedData.partners.forEach((pUpdate: any, i: number) => {
                  mergedPartners[i] = { ...(mergedPartners[i] || emptyPartner()), ...pUpdate };
              });
@@ -324,8 +331,9 @@ export default function DeedApp() {
   };
 
   // Progress
-  const requiredCount = [data.businessName, data.natureOfBusiness, data.durationStartDate, data.registeredAddress].filter(f => !!f).length + (data.partners.length * 2);
-  const totalRequired = 4 + (Math.max(2, data.partners.length) * 2);
+  const n = data.numPartners || Math.max(2, data.partners.length);
+  const requiredCount = [data.businessName, data.natureOfBusiness, data.durationStartDate, data.registeredAddress].filter(f => !!f).length + (data.partners.filter(p => p.fullName && p.fatherName && p.age && p.address).length * 2);
+  const totalRequired = 4 + (n * 2);
   const progress = Math.min(100, Math.round((requiredCount / totalRequired) * 100));
 
   const fileRef = useRef<HTMLInputElement>(null);
