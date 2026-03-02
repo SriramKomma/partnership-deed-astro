@@ -168,14 +168,11 @@ export default function DeedApp() {
     durationType: 'AT WILL', durationStartDate: '', registeredAddress: '',
     partners: [], businessObjective: '',
   });
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
-  const [step, setStep] = useState<Step>({ type: 'num_partners' });
+  const [messages, setMessages] = useState<{ role: 'user'|'bot'|'system', text: string }[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [ocrMode, setOcrMode] = useState<'AADHAAR' | 'PAN' | null>(null);
-  const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  
   // Preview editing toggle and handler
   const [previewEditable, setPreviewEditable] = useState(false);
   const handlePreviewUpdate = (idx: number, field: string, value: string) => {
@@ -188,248 +185,84 @@ export default function DeedApp() {
     });
   };
 
-  // Advance to next step given current step and number of partners
-  const nextStep = useCallback((cur: Step, numPartners: number): Step => {
-    const n = numPartners;
-    const pi = cur.partnerIdx ?? 0;
-    switch (cur.type) {
-      case 'num_partners':   return { type: 'deed_date' };
-      case 'deed_date':      return { type: 'partner_aadhaar', partnerIdx: 0 };
-      case 'partner_aadhaar': return { type: 'partner_name', partnerIdx: pi };
-      case 'partner_name':   return { type: 'partner_father', partnerIdx: pi };
-      case 'partner_father': return { type: 'partner_age', partnerIdx: pi };
-      case 'partner_age':    return { type: 'partner_address', partnerIdx: pi };
-      case 'partner_address':return { type: 'partner_pan', partnerIdx: pi };
-      case 'partner_pan':    return pi + 1 < n ? { type: 'partner_aadhaar', partnerIdx: pi + 1 } : { type: 'managing' };
-      case 'managing':       return { type: 'bank' };
-      case 'bank':           return { type: 'nature' };
-      case 'nature':         return { type: 'firm_name' };
-      case 'firm_name':      return { type: 'firm_address' };
-      case 'firm_address':   return { type: 'start_date' };
-      case 'start_date':     return { type: 'capital', partnerIdx: 0 };
-      case 'capital':        return pi + 1 < n ? { type: 'capital', partnerIdx: pi + 1 } : { type: 'profit', partnerIdx: 0 };
-      case 'profit':         return pi + 1 < n ? { type: 'profit', partnerIdx: pi + 1 } : { type: 'generating' };
-      default: return { type: 'done' };
-    }
-  }, []);
+  const addBot = (text: string) => setMessages(prev => [...prev, { role: 'bot', text }]);
 
-  const questionFor = (s: Step, d: DeedData): string => {
-    const pi = s.partnerIdx ?? 0;
-    const pName = d.partners[pi]?.fullName ? `(${d.partners[pi].fullName})` : '';
-    const partnerList = d.partners.map((p, i) => `${i + 1}. ${p.fullName || `Partner ${i + 1}`}`).join('\n');
-    switch (s.type) {
-      case 'num_partners':    return 'How many partners will be part of the firm? (2–50)';
-      case 'deed_date':       return `Deed execution date is set to today: "${d.executionDate}"\nType a different date to change it, or press Enter / type "ok" to confirm.`;
-      case 'partner_aadhaar': return `Upload Aadhaar card for Partner ${pi + 1} to auto-fill details, or type "skip" to enter manually.`;
-      case 'partner_name':    return `Full name of Partner ${pi + 1}?`;
-      case 'partner_father':  return `Father's / Spouse's name of Partner ${pi + 1} ${pName}?`;
-      case 'partner_age':     return `Age of Partner ${pi + 1} ${pName} (in years)?`;
-      case 'partner_address': return `Residential address of Partner ${pi + 1} ${pName}?`;
-      case 'partner_pan':     return `Upload PAN card for Partner ${pi + 1} ${pName}, or type "skip".`;
-      case 'managing':        return `Which partners are MANAGING partners?\nEnter comma-separated numbers:\n${partnerList}`;
-      case 'bank':            return `Which partners are authorized to operate BANK ACCOUNTS?\nEnter comma-separated numbers:\n${partnerList}`;
-      case 'nature':          return 'What is the nature of business?';
-      case 'firm_name':       return nameSuggestions.length
-        ? `Business/firm name?\nSuggestions:\n${nameSuggestions.map((n,i)=>`${i+1}. ${n}`).join('\n')}\n(Type a name or enter 1/2/3 to pick a suggestion)`
-        : 'What is the business/firm name?';
-      case 'firm_address':    return 'What is the registered address of the firm?';
-      case 'start_date':      return 'What is the partnership start date? (e.g. 01st March 2026)';
-      case 'capital':         return `Capital contribution % for Partner ${pi + 1} ${pName}?\n(Remaining partners will follow — all must total 100%)`;
-      case 'profit':          return `Profit/loss share % for Partner ${pi + 1} ${pName}?\n(All must total 100%)`;
-      case 'generating':      return '⏳ Generating your partnership deed…';
-      case 'done':            return '✅ Your Partnership Deed is complete! Review on the right and click ⬇ Download Deed.';
-      default: return '';
+  const processChat = async (userText: string, hiddenSystemContext?: string) => {
+    let currentMsgs = [...messages];
+    if (userText) {
+      currentMsgs.push({ role: 'user', text: userText });
+      setMessages(currentMsgs);
     }
+    
+    setLoading(true);
+    try {
+      const apiMessages = currentMsgs.map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, content: m.text }));
+      if (hiddenSystemContext) {
+        apiMessages.push({ role: 'system', content: hiddenSystemContext });
+      }
+
+      const r = await fetch('/api/chat-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: apiMessages, deedData: data }),
+      });
+      const res = await r.json();
+
+      if (res.extractedData) {
+         let newData = { ...data, ...res.extractedData };
+         if (res.extractedData.partners) {
+             const mergedPartners = [...data.partners];
+             res.extractedData.partners.forEach((pUpdate: any, i: number) => {
+                 mergedPartners[i] = { ...(mergedPartners[i] || emptyPartner()), ...pUpdate };
+             });
+             newData.partners = mergedPartners;
+         }
+         setData(newData);
+      }
+
+      if (res.content) {
+         currentMsgs.push({ role: 'bot', text: res.content });
+         setMessages(currentMsgs);
+      }
+    } catch {
+      addBot("Sorry, I encountered an error connecting to the AI.");
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
-    const q = questionFor({ type: 'num_partners' }, data);
     setMessages([
-      { role: 'bot', text: '⚖ Welcome! I\'ll guide you through drafting your Partnership Deed under the Indian Partnership Act, 1932.\n\nAadhaar/PAN upload auto-fills partner details. The deed updates live on the right.' },
-      { role: 'bot', text: q },
+      { role: 'bot', text: '⚖ Welcome! I am your AI assistant to help you draft your Partnership Deed.\nI will ask you for details one by one. You can upload ID cards or type the info manually.' }
     ]);
+    processChat('', 'The user has just arrived. Please greet them briefly and ask for the number of partners or the business name.');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const addBot = (text: string) => setMessages(prev => [...prev, { role: 'bot', text }]);
-
-  const processAnswer = async (answer: string) => {
-    const pi = step.partnerIdx ?? 0;
-    const numPartners = data.partners.length;
-    let newData = { ...data };
-
-    const updatePartner = (idx: number, update: Partial<Partner>) => {
-      const pts = [...newData.partners];
-      pts[idx] = { ...pts[idx], ...update };
-      newData = { ...newData, partners: pts };
-    };
-
-    switch (step.type) {
-      case 'num_partners': {
-        const n = Math.min(50, Math.max(2, parseInt(answer) || 2));
-        newData.partners = Array.from({ length: n }, emptyPartner);
-        break;
-      }
-      case 'deed_date': {
-        if (answer.toLowerCase() !== 'ok' && answer.trim()) newData.executionDate = answer;
-        break;
-      }
-      case 'partner_name':    updatePartner(pi, { fullName: answer }); break;
-      case 'partner_father':  updatePartner(pi, { fatherName: answer }); break;
-      case 'partner_age':     updatePartner(pi, { age: answer }); break;
-      case 'partner_address': updatePartner(pi, { address: answer }); break;
-      case 'managing': {
-        const picks = answer.split(',').map(s => parseInt(s.trim()) - 1).filter(i => i >= 0 && i < numPartners);
-        const pts = newData.partners.map((p, i) => ({ ...p, isManagingPartner: picks.includes(i) }));
-        newData = { ...newData, partners: pts };
-        break;
-      }
-      case 'bank': {
-        const picks = answer.split(',').map(s => parseInt(s.trim()) - 1).filter(i => i >= 0 && i < numPartners);
-        const pts = newData.partners.map((p, i) => ({ ...p, isBankAuthorized: picks.includes(i) }));
-        newData = { ...newData, partners: pts };
-        break;
-      }
-      case 'nature': {
-        newData.natureOfBusiness = answer;
-        // Fetch name suggestions in background
-        fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ task: 'suggest_names', context: { natureOfBusiness: answer } }),
-        }).then(r => r.json()).then(({ content }) => {
-          try {
-            const suggestions = JSON.parse(content);
-            if (Array.isArray(suggestions)) setNameSuggestions(suggestions);
-          } catch { /* ignore */ }
-        }).catch(() => {});
-        break;
-      }
-      case 'firm_name': {
-        if (answer === '1' && nameSuggestions[0]) newData.businessName = nameSuggestions[0];
-        else if (answer === '2' && nameSuggestions[1]) newData.businessName = nameSuggestions[1];
-        else if (answer === '3' && nameSuggestions[2]) newData.businessName = nameSuggestions[2];
-        else newData.businessName = answer;
-        break;
-      }
-      case 'firm_address':  newData.registeredAddress = answer; break;
-      case 'start_date':    newData.durationStartDate = answer; break;
-      case 'capital':       updatePartner(pi, { capitalContribution: answer.replace('%','').trim() }); break;
-      case 'profit':        updatePartner(pi, { profitShare: answer.replace('%','').trim() }); break;
-    }
-
-    setData(newData);
-
-    const ns = nextStep(step, newData.partners.length);
-
-    // Generate objectives before marking done
-    if (ns.type === 'generating') {
-      setStep(ns);
-      addBot('⏳ Generating business objectives paragraph…');
-      setLoading(true);
-      try {
-        const r = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ task: 'generate_objectives', context: { businessName: newData.businessName, natureOfBusiness: newData.natureOfBusiness } }),
-        });
-        const { content } = await r.json();
-        newData = { ...newData, businessObjective: content };
-        setData(newData);
-      } catch { /* silent */ }
-      setLoading(false);
-      setStep({ type: 'done' });
-      addBot('✅ Your Partnership Deed is complete! All fields are filled in.\nReview the document on the right and click ⬇ Download Deed.');
-      return;
-    }
-
-    setStep(ns);
-    // Show the next question (after a brief delay for nameSuggestions to load)
-    setTimeout(() => {
-      addBot(questionFor(ns, newData));
-      if (ns.type === 'partner_aadhaar') setOcrMode('AADHAAR');
-      else if (ns.type === 'partner_pan') setOcrMode('PAN');
-      else setOcrMode(null);
-    }, ns.type === 'firm_name' ? 800 : 0);
-  };
-
-  const handleEdit = (snapIdx: number) => {
-    const snap = snapshots[snapIdx];
-    if (!snap) return;
-    // Restore step & data to before that answer was given
-    setStep(snap.step);
-    setData(snap.data);
-    // Trim messages back to just before the user message
-    setMessages(prev => prev.slice(0, snap.msgCount));
-    // Trim snapshots to before this one
-    setSnapshots(prev => prev.slice(0, snapIdx));
-    // Pre-fill input with the old answer text
-    const oldMsg = messages.find(m => m.snapIdx === snapIdx);
-    setInput(oldMsg?.text || '');
-    // Restore OCR mode if that step needed it
-    if (snap.step.type === 'partner_aadhaar') setOcrMode('AADHAAR');
-    else if (snap.step.type === 'partner_pan') setOcrMode('PAN');
-    else setOcrMode(null);
-  };
-
   const handleSend = async () => {
     const v = input.trim();
-    if (!v || loading || step.type === 'done' || step.type === 'generating') return;
+    if (!v || loading) return;
     setInput('');
-    setOcrMode(null);
-    // Save snapshot BEFORE processing so we can roll back later
-    const snapIdx = snapshots.length;
-    const snap: Snapshot = { step, data, msgCount: messages.length };
-    setSnapshots(prev => [...prev, snap]);
-    setMessages(prev => [...prev, { role: 'user', text: v, snapIdx }]);
-    setLoading(true);
-    await processAnswer(v);
-    setLoading(false);
+    await processChat(v);
   };
 
   const handleOCRUpload = async (file: File, type: 'AADHAAR' | 'PAN') => {
-    const pi = step.partnerIdx ?? 0;
-    setOcrMode(null);
     setLoading(true);
-    addBot(`🔍 Reading ${type === 'AADHAAR' ? 'Aadhaar' : 'PAN'} card…`);
+    addBot(`🔍 Reading ${type === 'AADHAAR' ? 'Aadhaar' : 'PAN'} card via OCR...`);
     try {
       const extracted = type === 'AADHAAR' ? await ocrAadhaar(file) : await ocrPAN(file);
-      const newData = { ...data };
-      const pts = [...newData.partners];
-      if (type === 'AADHAAR') {
-        pts[pi] = {
-          ...pts[pi],
-          fullName: extracted.name || pts[pi].fullName,
-          fatherName: extracted.fatherName || pts[pi].fatherName,
-          age: extracted.age || pts[pi].age,
-          address: extracted.address || pts[pi].address,
-          aadhaarNumberStored: true,
-        };
-        addBot(`✅ Aadhaar extracted:\nName: ${extracted.name || '(not detected)'}\nFather: ${extracted.fatherName || '(not detected)'}\nAge: ${extracted.age || '(not detected)'}\nAddress: ${extracted.address || '(not detected)'}\n\nPlease type the full name of Partner ${pi + 1} (or confirm by typing "ok")`);
-      } else {
-        pts[pi] = {
-          ...pts[pi],
-          panNumber: extracted.pan || pts[pi].panNumber,
-          fullName: extracted.name && !pts[pi].fullName ? extracted.name : pts[pi].fullName,
-          panNumberStored: !!extracted.pan,
-        };
-        addBot(`✅ PAN extracted: ${extracted.pan || '(not detected)'}`);
-      }
-      newData.partners = pts;
-      setData(newData);
-      // Advance past the upload step
-      const ns = nextStep(step, newData.partners.length);
-      setStep(ns);
-      setTimeout(() => addBot(questionFor(ns, newData)), 300);
+      const details = type === 'AADHAAR' 
+        ? `Name: ${extracted.name}, Father: ${extracted.fatherName}, Age: ${extracted.age}, Address: ${extracted.address}`
+        : `PAN: ${extracted.pan}`;
+      
+      const hiddenContext = `The user just uploaded an ${type} card. The OCR system extracted these details: ${details}. Acknowledge this and seamlessly update the data using the tool, then ask for the next missing field.`;
+      
+      await processChat(`[Uploaded ${type} Card Image]`, hiddenContext);
     } catch {
-      addBot('❌ Could not read the image. Please try a clearer photo or type the details manually.');
-      const ns = nextStep(step, data.partners.length);
-      setStep(ns);
-      setTimeout(() => addBot(questionFor(ns, data)), 300);
+      addBot('❌ Could not read the image. Please type the details manually.');
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -491,12 +324,12 @@ export default function DeedApp() {
   };
 
   // Progress
-
-  const stepOrder: StepType[] = ['num_partners','deed_date','partner_aadhaar','partner_name','partner_father','partner_age','partner_address','partner_pan','managing','bank','nature','firm_name','firm_address','start_date','capital','profit','generating','done'];
-  const progressIdx = stepOrder.indexOf(step.type);
-  const progress = step.type === 'done' ? 100 : Math.round((progressIdx / stepOrder.length) * 100);
+  const requiredCount = [data.businessName, data.natureOfBusiness, data.durationStartDate, data.registeredAddress].filter(f => !!f).length + (data.partners.length * 2);
+  const totalRequired = 4 + (Math.max(2, data.partners.length) * 2);
+  const progress = Math.min(100, Math.round((requiredCount / totalRequired) * 100));
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const [activeUploadContext, setActiveUploadContext] = useState<'AADHAAR' | 'PAN'>('AADHAAR');
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: "'Segoe UI', sans-serif", background: '#e5e5e5' }}>
@@ -536,22 +369,6 @@ export default function DeedApp() {
                   border: msg.role === 'bot' ? '1px solid #2a3560' : 'none',
                   whiteSpace: 'pre-wrap',
                 }}>{msg.text}</div>
-                {msg.role === 'user' && msg.snapIdx !== undefined && !loading && step.type !== 'done' && (
-                  <button
-                    onClick={() => handleEdit(msg.snapIdx!)}
-                    title="Edit this answer"
-                    style={{
-                      background: 'transparent', border: 'none', cursor: 'pointer',
-                      color: '#4a5572', fontSize: '10px', padding: '1px 4px',
-                      display: 'flex', alignItems: 'center', gap: '3px',
-                      transition: 'color 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.color = '#d4a843')}
-                    onMouseLeave={e => (e.currentTarget.style.color = '#4a5572')}
-                  >
-                    ✏️ <span style={{ fontSize: '9.5px' }}>Edit</span>
-                  </button>
-                )}
               </div>
             </div>
           ))}
@@ -567,39 +384,29 @@ export default function DeedApp() {
         </div>
 
         {/* Input */}
-        {step.type !== 'done' && step.type !== 'generating' && (
-          <div style={{ padding: '12px', background: '#12122a', borderTop: '1px solid #1a2a4a' }}>
-            {/* OCR Upload Card */}
-            {ocrMode && (
-              <div style={{ background: '#0f1f3a', border: `1.5px dashed rgba(212,168,67,0.4)`, borderRadius: '10px', padding: '12px', marginBottom: '10px' }}>
-                <div style={{ fontSize: '12px', color: '#d4a843', fontWeight: 700, marginBottom: '8px' }}>
-                  {ocrMode === 'AADHAAR' ? '🪪 Aadhaar Card' : '📋 PAN Card'} — Upload image to auto-fill
-                </div>
-                <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf,.heic,.heif,.tiff,.tif" style={{ display: 'none' }}
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleOCRUpload(f, ocrMode!); }} />
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => fileRef.current?.click()}
-                    style={{ flex: 1, padding: '7px', borderRadius: '7px', border: 'none', background: '#d4a843', color: '#12122a', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
-                    📤 Choose Image
-                  </button>
-                  <button onClick={() => { setOcrMode(null); setMessages(prev => [...prev, { role: 'user', text: 'skip' }]); processAnswer('skip'); }}
-                    style={{ padding: '7px 12px', borderRadius: '7px', border: '1px solid #2a3560', background: 'transparent', color: '#94a3b8', fontSize: '12px', cursor: 'pointer' }}>
-                    Skip
-                  </button>
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-                placeholder="Type your answer…" rows={2}
-                style={{ flex: 1, background: '#0f1f3a', border: '1px solid #2a3560', borderRadius: '10px', padding: '9px 13px', fontSize: '11.5px', color: '#d4c090', outline: 'none', resize: 'none', lineHeight: 1.5, fontFamily: 'inherit' }} />
-              <button onClick={handleSend} disabled={loading || !input.trim()}
-                style={{ background: loading || !input.trim() ? '#333' : '#d4a843', color: '#12122a', border: 'none', borderRadius: '10px', width: '42px', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', fontSize: '17px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>→</button>
-            </div>
-            <div style={{ fontSize: '9.5px', color: '#4a5572', marginTop: '4px' }}>Enter to submit • Shift+Enter for new line</div>
+        <div style={{ padding: '12px', background: '#12122a', borderTop: '1px solid #1a2a4a' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+            <button onClick={() => { setActiveUploadContext('AADHAAR'); fileRef.current?.click(); }}
+              style={{ flex: 1, padding: '7px', borderRadius: '7px', border: '1px solid #2a3560', background: 'transparent', color: '#94a3b8', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>
+              📎 Upload Aadhaar
+            </button>
+            <button onClick={() => { setActiveUploadContext('PAN'); fileRef.current?.click(); }}
+              style={{ flex: 1, padding: '7px', borderRadius: '7px', border: '1px solid #2a3560', background: 'transparent', color: '#94a3b8', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>
+              📎 Upload PAN
+            </button>
+            <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf,.heic,.heif,.tiff,.tif" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleOCRUpload(f, activeUploadContext); }} />
           </div>
-        )}
-        {step.type === 'done' && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
+              placeholder="Type your answer…" rows={2}
+              style={{ flex: 1, background: '#0f1f3a', border: '1px solid #2a3560', borderRadius: '10px', padding: '9px 13px', fontSize: '11.5px', color: '#d4c090', outline: 'none', resize: 'none', lineHeight: 1.5, fontFamily: 'inherit' }} />
+            <button onClick={handleSend} disabled={loading || !input.trim()}
+              style={{ background: loading || !input.trim() ? '#333' : '#d4a843', color: '#12122a', border: 'none', borderRadius: '10px', width: '42px', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', fontSize: '17px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>→</button>
+          </div>
+          <div style={{ fontSize: '9.5px', color: '#4a5572', marginTop: '4px' }}>Enter to submit • Shift+Enter for new line</div>
+        </div>
+        {progress >= 100 && (
           <div style={{ padding: '16px', background: '#12122a', borderTop: '1px solid #1a2a4a', textAlign: 'center' }}>
             <div style={{ color: '#d4a843', fontSize: '13px', fontWeight: 700 }}>🎉 Deed Complete!</div>
             <div style={{ color: '#7a8494', fontSize: '11px', marginTop: '4px' }}>Download it from the right panel</div>
