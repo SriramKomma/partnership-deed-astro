@@ -4,7 +4,7 @@ import Groq from 'groq-sdk';
 
 const groq = new Groq({ apiKey: import.meta.env.GROQ_API_KEY });
 
-// ─── Google Cloud Vision via REST API (avoids gRPC issues in Astro SSR) ──────
+// ─── Google Cloud Document AI via REST API ───────────────────────────────────
 
 interface ServiceAccountKey {
   client_email: string;
@@ -32,7 +32,7 @@ async function getAccessToken(creds: ServiceAccountKey): Promise<string> {
   const now  = Math.floor(Date.now() / 1000);
   const claim = {
     iss: creds.client_email,
-    scope: 'https://www.googleapis.com/auth/cloud-vision',
+    scope: 'https://www.googleapis.com/auth/cloud-platform',  // Document AI scope
     aud: creds.token_uri,
     iat: now,
     exp: now + 3600,
@@ -63,30 +63,41 @@ async function getAccessToken(creds: ServiceAccountKey): Promise<string> {
   return data.access_token;
 }
 
-async function googleVisionOCR(imageBase64: string): Promise<string> {
+async function googleDocumentAIOcr(imageBase64: string, mimeType: string): Promise<string> {
   const creds = loadCredentials();
   const token = await getAccessToken(creds);
 
-  const res = await fetch(
-    'https://vision.googleapis.com/v1/images:annotate',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        requests: [{
-          image: { content: imageBase64 },
-          features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-        }],
-      }),
+  const projectId  = import.meta.env.GOOGLE_PROJECT_ID   || process.env.GOOGLE_PROJECT_ID;
+  const location   = import.meta.env.GOOGLE_LOCATION     || process.env.GOOGLE_LOCATION   || 'us';
+  const processorId = import.meta.env.GOOGLE_PROCESSOR_ID || process.env.GOOGLE_PROCESSOR_ID;
+
+  if (!projectId || !processorId) {
+    throw new Error('GOOGLE_PROJECT_ID or GOOGLE_PROCESSOR_ID env var not set');
+  }
+
+  const endpoint = `https://${location}-documentai.googleapis.com/v1/projects/${projectId}/locations/${location}/processors/${processorId}:process`;
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
-  );
+    body: JSON.stringify({
+      rawDocument: {
+        content: imageBase64,
+        mimeType: mimeType || 'image/jpeg',
+      },
+    }),
+  });
 
   const json = await res.json() as any;
-  if (json.error) throw new Error(json.error.message);
-  return json.responses?.[0]?.fullTextAnnotation?.text || '';
+  if (json.error) throw new Error(`Document AI: ${json.error.message || JSON.stringify(json.error)}`);
+
+  // Document AI returns document.text — plain text of the whole document
+  const text = json.document?.text || '';
+  console.log(`[ocr] Document AI raw text (${text.length} chars):`, text.slice(0, 200));
+  return text;
 }
 
 // ─── Regex-first PAN / Aadhaar ────────────────────────────────────────────────
@@ -153,12 +164,12 @@ export const POST: APIRoute = async ({ request }) => {
       docType: 'aadhaar' | 'pan';
     };
 
-    // Stage 1a: Google Cloud Vision OCR (primary)
+    // Stage 1: Google Cloud Document AI (primary)
     let rawText = '';
-    let visionSource = 'google';
+    let visionSource = 'documentai';
     try {
-      rawText = await googleVisionOCR(imageBase64);
-      console.log(`[ocr] Google Vision OK (${rawText.length} chars)`);
+      rawText = await googleDocumentAIOcr(imageBase64, _mimeType);
+      console.log(`[ocr] Document AI OK (${rawText.length} chars)`);
     } catch (gErr: any) {
       // Fallback to Groq Vision if Google Vision fails (billing, quota, etc.)
       console.warn('[ocr] Google Vision failed, falling back to Groq Vision:', gErr?.message);
