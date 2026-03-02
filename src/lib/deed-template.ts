@@ -5,8 +5,7 @@
  * Legal text is NEVER modified.
  */
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+// No fs imports needed — template is built programmatically
 
 // ─── Types (mirror DeedApp.tsx) ───────────────────────────────────────────────
 
@@ -148,12 +147,31 @@ export function renderDeed(data: DeedData): string {
   <meta http-equiv="content-type" content="text/html; charset=utf-8"/>
   <title>PARTNERSHIP DEED — M/s. ${esc(businessName)}</title>
   <style type="text/css">
-    @page { size: A4; margin: 1in; }
-    body { font-family: Verdana, sans-serif; font-size: 11pt; color: #000; background: #fff; }
+    /* ── Print / PDF (Puppeteer) ── */
+    @page { size: A4; margin: 25.4mm 25.4mm 25.4mm 25.4mm; }
+
+    /* ── Screen: grey background, centred A4 paper card ── */
+    html, body {
+      margin: 0; padding: 0;
+      background: #b0b0b0;
+      font-family: Verdana, sans-serif;
+      font-size: 11pt;
+      color: #000;
+    }
+    .a4-page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 20px auto;
+      background: #fff;
+      padding: 25.4mm;
+      box-sizing: border-box;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.30);
+    }
     p { line-height: 115%; text-align: left; orphans: 2; widows: 2; margin-bottom: 0.1in; }
     @media print {
+      html, body { background: #fff; }
+      .a4-page { box-shadow: none; margin: 0; padding: 0; width: 100%; }
       .no-print { display: none !important; }
-      body { margin: 0; }
     }
     .disclaimer {
       margin-top: 2em;
@@ -166,6 +184,7 @@ export function renderDeed(data: DeedData): string {
   </style>
 </head>
 <body lang="en-IN" dir="ltr">
+<div class="a4-page">
 
 <!-- ── TITLE ── -->
 <p lang="en-US" align="center" style="line-height: 100%; margin-bottom: 0in; margin-top: 2in">
@@ -508,6 +527,7 @@ ${witnessRows}
   a qualified legal professional before execution.
 </div>
 
+</div><!-- /.a4-page -->
 </body>
 </html>`;
 }
