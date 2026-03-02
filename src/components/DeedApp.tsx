@@ -19,21 +19,6 @@ interface DeedData {
   partners: Partner[]; businessObjective: string;
 }
 
-type StepType =
-  | 'num_partners' | 'deed_date'
-  | 'partner_aadhaar' | 'partner_name' | 'partner_father'
-  | 'partner_age' | 'partner_address' | 'partner_pan'
-  | 'managing' | 'bank'
-  | 'nature' | 'firm_name' | 'firm_address' | 'start_date'
-  | 'capital' | 'profit' | 'generating' | 'done';
-
-interface Step { type: StepType; partnerIdx?: number }
-
-interface ChatMsg { role: 'bot' | 'user'; text: string; snapIdx?: number }
-interface Snapshot { step: Step; data: DeedData; msgCount: number }
-
-const PRIMARY = '#01334c';
-
 const emptyPartner = (): Partner => ({
   salutation: 'Mr.', fullName: '', fatherName: '', age: '', address: '',
   panNumber: '', aadhaarNumberStored: false, panNumberStored: false,
@@ -41,120 +26,102 @@ const emptyPartner = (): Partner => ({
   capitalContribution: '', profitShare: '',
 });
 
-  // ─── Deed Preview ─────────────────────────────────────────────────────────────
- 
+// ─── Constants & Styles ────────────────────────────────────────────────────────
+
+const PRIMARY = '#0f172a';      // Slate 900
+const ACCENT = '#3b82f6';       // Blue 500
+const ACCENT_GLOW = 'rgba(59, 130, 246, 0.5)';
+const BG_DARK = '#020617';      // Slate 950
+const PANEL_BG = '#0f172a';     // Slate 900
+const TEXT_MUTED = '#94a3b8';   // Slate 400
+const TEXT_LIGHT = '#f8fafc';   // Slate 50
+
+// ─── Deed Preview ─────────────────────────────────────────────────────────────
+
 function hl(val: string): React.CSSProperties {
-  return val ? {} : { background: '#fff3cd', borderRadius: '2px', padding: '0 2px' };
+  return val ? {} : { background: '#fef9c3', color: '#854d0e', borderRadius: '4px', padding: '0 4px', fontWeight: 600, border: '1px dashed #eab308' };
 }
 function ph(val: string, label: string) { return val || `[${label}]`; }
 
-const partyLabels = ['First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth'];
+const partyLabels = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth'];
 
-function DeedPreview({ data: d, onUpdate, editable }: { data: DeedData; onUpdate?: (idx: number, field: string, value: string) => void; editable?: boolean; }) {
-  const pg: React.CSSProperties = { fontFamily: 'Verdana, Geneva, sans-serif', fontSize: '10.5px', lineHeight: 1.75, color: '#000', padding: '56px 72px 72px 60px', background: '#fff' };
-  const cl: React.CSSProperties = { display: 'flex', gap: '10px', marginBottom: '11px', alignItems: 'flex-start', textAlign: 'justify' };
-  const b: React.CSSProperties = { fontWeight: 'bold' };
-  const bu: React.CSSProperties = { fontWeight: 'bold', textDecoration: 'underline' };
+function DeedPreview({ data: d }: { data: DeedData }) {
+  const pg: React.CSSProperties = { fontFamily: '"Georgia", serif', fontSize: '13px', lineHeight: 1.8, color: '#1e293b', padding: '60px 80px', background: '#ffffff', boxShadow: '0 10px 40px rgba(0,0,0,0.08)' };
+  const cl: React.CSSProperties = { display: 'flex', gap: '14px', marginBottom: '14px', alignItems: 'flex-start', textAlign: 'justify' };
+  const b: React.CSSProperties = { fontWeight: 'bold', color: '#0f172a' };
+  const bu: React.CSSProperties = { fontWeight: 'bold', textDecoration: 'underline', color: '#0f172a' };
   const ps = d.partners || [];
   const managers = ps.filter(p => p.isManagingPartner);
   const bankers = ps.filter(p => p.isBankAuthorized);
 
   return (
     <div style={pg}>
-      <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', letterSpacing: '1px', marginBottom: '6px' }}>PARTNERSHIP DEED</div>
-      <div style={{ height: '14px' }} />
-      <div style={{ marginBottom: '12px', textAlign: 'justify' }}>
-        This Deed of Partnership is made and executed on <span style={hl(d.executionDate)}>{ph(d.executionDate,'Deed Date')}</span>, by and between:
+      <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '18px', letterSpacing: '2px', marginBottom: '10px', textTransform: 'uppercase' }}>Partnership Deed</div>
+      <div style={{ height: '20px' }} />
+      <div style={{ marginBottom: '16px', textAlign: 'justify' }}>
+        This Deed of Partnership is made and executed on <span style={hl(d.executionDate)}>{ph(d.executionDate, 'Deed Date')}</span>, by and between:
       </div>
       {ps.length === 0
-        ? <div style={{ background: '#fff3cd', padding: '10px', borderRadius: '4px', marginBottom: '12px', fontSize: '10px' }}>[Partner details will appear as you answer the questions →]</div>
-        : ps.map((p, i) => {
-            if (!editable) {
-              return (
-                <div key={i}>
-                  <div style={{ marginBottom: '6px', display: 'flex', gap: '10px' }}>
-                    <span style={b}>{i + 1}.</span>
-                    <span>
-                      <span style={{ ...b, ...hl(p.fullName) }}>{ph(p.fullName,`Partner ${i+1}`)}</span> S/O{' '}
-                      <span style={hl(p.fatherName)}>{ph(p.fatherName,"Father's Name")}</span> Aged{' '}
-                      <span style={hl(p.age)}>{ph(p.age,'Age')}</span> Years, residing at{' '}
-                      <span style={hl(p.address)}>{ph(p.address,'Address')}</span>.
-                    </span>
-                  </div>
-                  <div style={{ paddingLeft: '220px', marginBottom: '14px' }}>
-                    (Hereinafter called as the &ldquo;<span style={{ ...b, color: '#006666' }}>{partyLabels[i] || `${i+1}th`} party</span>&rdquo;)
-                  </div>
-                </div>
-              );
-            }
-            // Editable mode: render inputs for core fields
-            return (
-              <div key={i} style={{ marginBottom: '12px' }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={b}>{i + 1}.</span>
-                  <span>
-                    <input value={p.fullName} onChange={e => onUpdate?.(i, 'fullName', e.target.value)} style={Object.assign({},{ padding:'2px 6px', borderRadius: '4px', border: '1px solid #ccc' })} />
-                    {' '}S/O{' '}
-                    <input value={p.fatherName} onChange={e => onUpdate?.(i, 'fatherName', e.target.value)} style={{ padding:'2px 6px', borderRadius: '4px', border: '1px solid #ccc' }} />
-                    {' '}Aged{' '}
-                    <input value={p.age} onChange={e => onUpdate?.(i, 'age', e.target.value)} style={{ padding:'2px 6px', borderRadius: '4px', border: '1px solid #ccc' }} />
-                    {' '}Years, residing at{' '}
-                    <input value={p.address} onChange={e => onUpdate?.(i, 'address', e.target.value)} style={{ padding:'2px 6px', borderRadius: '4px', border: '1px solid #ccc' }} />
-                  </span>
-                </div>
-              </div>
-            );
-          })
+        ? <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '8px', marginBottom: '16px', fontSize: '12px', borderLeft: `4px solid ${ACCENT}`, color: '#475569' }}>
+          ✨ Your partner details will dynamically appear here as we chat.
+        </div>
+        : ps.map((p, i) => (
+          <div key={i} style={{ marginBottom: '16px' }}>
+            <div style={{ marginBottom: '8px', display: 'flex', gap: '12px' }}>
+              <span style={b}>{i + 1}.</span>
+              <span>
+                <span style={{ ...b, ...hl(p.fullName) }}>{ph(p.fullName, `Partner ${i + 1}`)}</span> S/O{' '}
+                <span style={hl(p.fatherName)}>{ph(p.fatherName, "Father's Name")}</span> Aged{' '}
+                <span style={hl(p.age)}>{ph(p.age, 'Age')}</span> Years, residing at{' '}
+                <span style={hl(p.address)}>{ph(p.address, 'Address')}</span>.
+              </span>
+            </div>
+            <div style={{ paddingLeft: '40px', marginBottom: '16px', fontStyle: 'italic', color: '#334155' }}>
+              (Hereinafter called as the &ldquo;<span style={{ ...b, color: ACCENT }}>{partyLabels[i] || `${i + 1}th`} party</span>&rdquo;)
+            </div>
+          </div>
+        ))
       }
-      <div style={{ marginBottom: '10px', textAlign: 'justify' }}>
+      <div style={{ marginBottom: '14px', textAlign: 'justify' }}>
         WHEREAS the parties have mutually decided to start a partnership business of{' '}
-        <span style={hl(d.natureOfBusiness)}>{ph(d.natureOfBusiness,'Nature of Business')}</span> under the name and style as{' '}
-        <span style={b}>M/s. <span style={hl(d.businessName)}>{ph(d.businessName,'Firm Name')}</span>.</span>
+        <span style={hl(d.natureOfBusiness)}>{ph(d.natureOfBusiness, 'Nature of Business')}</span> under the name and style as{' '}
+        <span style={{ ...b, fontSize: '14px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>M/s. <span style={hl(d.businessName)}>{ph(d.businessName, 'Firm Name')}</span>.</span>
       </div>
-      <div style={{ marginBottom: '14px', textAlign: 'justify' }}>AND WHEREAS it is felt expedient to reduce the terms and conditions into writing to avoid any misunderstandings.</div>
-      <div style={{ textAlign: 'center', ...bu, marginBottom: '14px' }}>NOW THIS DEED OF PARTNERSHIP WITNESSETH AS FOLLOWS:</div>
+      <div style={{ marginBottom: '20px', textAlign: 'justify' }}>AND WHEREAS it is felt expedient to reduce the terms and conditions into writing to avoid any misunderstandings.</div>
+      <div style={{ textAlign: 'center', ...bu, marginBottom: '20px', fontSize: '14px' }}>NOW THIS DEED OF PARTNERSHIP WITNESSETH AS FOLLOWS:</div>
 
-      <div style={cl}><span style={{ minWidth: '26px' }}>1)</span><div style={{ flex: 1 }}>The partnership shall be carried on as <span style={b}>M/s. <span style={hl(d.businessName)}>{ph(d.businessName,'Firm Name')}</span></span> from <span style={{ ...b, ...hl(d.durationStartDate) }}>{ph(d.durationStartDate,'Start Date')}</span>. Duration: {d.durationType || 'AT WILL'} of the partners.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>2)</span><div style={{ flex: 1 }}>The <span style={b}>principal place of business</span> shall be at <span style={hl(d.registeredAddress)}>{ph(d.registeredAddress,'Registered Address')}</span>.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>3)</span><div style={{ flex: 1 }}>The <span style={b}>objective of partnership</span>: <span style={hl(d.businessObjective)}>{ph(d.businessObjective,'Business Objectives')}</span></div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>4)</span><div style={{ flex: 1 }}>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>1)</span><div style={{ flex: 1 }}>The partnership shall be carried on as <span style={b}>M/s. <span style={hl(d.businessName)}>{ph(d.businessName, 'Firm Name')}</span></span> from <span style={{ ...b, ...hl(d.durationStartDate) }}>{ph(d.durationStartDate, 'Start Date')}</span>. Duration: {d.durationType || 'AT WILL'} of the partners.</div></div>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>2)</span><div style={{ flex: 1 }}>The <span style={b}>principal place of business</span> shall be at <span style={hl(d.registeredAddress)}>{ph(d.registeredAddress, 'Registered Address')}</span>.</div></div>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>3)</span><div style={{ flex: 1 }}>The <span style={b}>objective of partnership</span>: <span style={hl(d.businessObjective)}>{ph(d.businessObjective, 'Business Objectives')}</span></div></div>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>4)</span><div style={{ flex: 1 }}>
         <span style={b}>Capital Contribution:</span><br />
         {ps.length === 0 ? <span style={hl('')}>[Partner capital details]</span>
-          : ps.map((p,i) => <span key={i}>&bull; <span style={hl(p.fullName)}>{ph(p.fullName,`P${i+1}`)}</span>: <span style={hl(p.capitalContribution)}>{ph(p.capitalContribution,'%')}</span>%<br /></span>)}
+          : ps.map((p, i) => <span key={i}>&bull; <span style={{ ...b, ...hl(p.fullName) }}>{ph(p.fullName, `P${i + 1}`)}</span>: <span style={hl(p.capitalContribution)}>{ph(p.capitalContribution, '%')}</span>%<br /></span>)}
       </div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>5)</span><div style={{ flex: 1 }}>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>5)</span><div style={{ flex: 1 }}>
         {managers.length > 0
-          ? <>{managers.map((p,i) => <span key={i}><span style={{ ...b, ...hl(p.fullName) }}>{ph(p.fullName,`Manager`)}</span>{i < managers.length-1 ? ' & ' : ''}</span>)} shall be the <span style={b}>managing partner(s)</span> authorized to manage all business affairs, enter contracts, open bank accounts, and do all necessary acts for the firm.</>
-          : <span style={hl('')}>[Managing partners — to be selected]</span>}
+          ? <>{managers.map((p, i) => <span key={i}><span style={{ ...b, ...hl(p.fullName), color: ACCENT }}>{ph(p.fullName, `Manager`)}</span>{i < managers.length - 1 ? ' & ' : ''}</span>)} shall be the <span style={b}>managing partner(s)</span> authorized to manage all business affairs.</>
+          : <span style={hl('')}>[Managing partners to be selected]</span>}
       </div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>6)</span><div style={{ flex: 1 }}>Banking accounts shall be operated by:{' '}{bankers.length > 0 ? bankers.map((p,i) => <span key={i}><span style={{ ...b, ...hl(p.fullName) }}>{ph(p.fullName,'Bank Partner')}</span>{i < bankers.length-1 ? ' and ' : ''}</span>) : <span style={hl('')}>[Bank authorized partners]</span>}.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>7)</span><div style={{ flex: 1 }}>Partners may appoint an authorized signatory for land/building transactions on mutual consent.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>8)</span><div style={{ flex: 1 }}>All partners shall be working partners. Salary/remuneration shall be as per Section 40(b) of the Income Tax Act, 1961. Interest at 12% per annum shall be payable on partners&apos; capital accounts.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>9)</span><div style={{ flex: 1 }}>Books of accounts shall be maintained at the principal place and closed on 31st March every year.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>10)</span><div style={{ flex: 1 }}>
-        Profit/Loss shares:<br />
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>6)</span><div style={{ flex: 1 }}>Banking accounts shall be operated by:{' '}{bankers.length > 0 ? bankers.map((p, i) => <span key={i}><span style={{ ...b, ...hl(p.fullName), color: ACCENT }}>{ph(p.fullName, 'Bank Partner')}</span>{i < bankers.length - 1 ? ' and ' : ''}</span>) : <span style={hl('')}>[Bank authorized partners]</span>}.</div></div>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>7)</span><div style={{ flex: 1 }}>Profit/Loss shares:<br />
         {ps.length === 0 ? <span style={hl('')}>[Partner profit shares]</span>
-          : ps.map((p,i) => <span key={i} style={b}>{i+1}. <span style={hl(p.fullName)}>{ph(p.fullName,`P${i+1}`)}</span> — <span style={hl(p.profitShare)}>{ph(p.profitShare,'%')}</span>%<br /></span>)}
+          : ps.map((p, i) => <span key={i} style={b}>{i + 1}. <span style={hl(p.fullName)}>{ph(p.fullName, `P${i + 1}`)}</span> — <span style={hl(p.profitShare)}>{ph(p.profitShare, '%')}</span>%<br /></span>)}
       </div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>11)</span><div style={{ flex: 1 }}>Any partner may retire by giving three calendar months&apos; notice.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>12)</span><div style={{ flex: 1 }}>Death, retirement or insolvency of any partner shall not dissolve the partnership.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>13)</span><div style={{ flex: 1 }}>Disputes shall be referred to a mutually appointed arbitrator — <span style={b}>MUTATIS MUTANDIS</span>.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>14)</span><div style={{ flex: 1 }}>The Indian Partnership Act, 1932 applies except as otherwise stated.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px' }}>15)</span><div style={{ flex: 1 }}>Amendments shall be in writing on Rs. 100/- stamp paper and have equal effect.</div></div>
 
-      <div style={{ marginTop: '20px', marginBottom: '30px', textAlign: 'justify' }}>
-        IN WITNESS WHEREOF the parties have set their hands on this the <span style={{ ...b, ...hl(d.executionDate) }}>{ph(d.executionDate,'Deed Date')}</span>.
+      <div style={{ marginTop: '40px', marginBottom: '40px', textAlign: 'justify' }}>
+        IN WITNESS WHEREOF the parties have set their hands on this the <span style={{ ...b, ...hl(d.executionDate) }}>{ph(d.executionDate, 'Deed Date')}</span>.
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
         <div style={{ width: '44%' }}>
           <div style={bu}>WITNESSES</div>
-          <div style={{ marginTop: '36px' }}>1. <span style={{ borderBottom: '1px solid #000', display: 'inline-block', width: '150px' }}>&nbsp;</span></div>
-          <div style={{ marginTop: '38px' }}>2. <span style={{ borderBottom: '1px solid #000', display: 'inline-block', width: '150px' }}>&nbsp;</span></div>
+          <div style={{ marginTop: '40px' }}>1. <span style={{ borderBottom: '1px solid #cbd5e1', display: 'inline-block', width: '150px' }}>&nbsp;</span></div>
+          <div style={{ marginTop: '40px' }}>2. <span style={{ borderBottom: '1px solid #cbd5e1', display: 'inline-block', width: '150px' }}>&nbsp;</span></div>
         </div>
         <div style={{ width: '44%' }}>
-          <div style={bu}>Partners</div>
-          {ps.map((_,i) => <div key={i} style={{ marginTop: '36px' }}>{i+1}. <span style={{ borderBottom: '1px solid #000', display: 'inline-block', width: '140px' }}>&nbsp;</span></div>)}
-          {ps.length === 0 && <div style={{ marginTop: '36px' }}><span style={hl('')}>[Partner signatures]</span></div>}
+          <div style={bu}>PARTNERS</div>
+          {ps.map((_, i) => <div key={i} style={{ marginTop: '40px' }}>{i + 1}. <span style={{ borderBottom: '1px solid #cbd5e1', display: 'inline-block', width: '140px' }}>&nbsp;</span></div>)}
+          {ps.length === 0 && <div style={{ marginTop: '40px' }}><span style={hl('')}>[Partner signatures]</span></div>}
         </div>
       </div>
     </div>
@@ -169,22 +136,13 @@ export default function DeedApp() {
     durationType: 'AT WILL', durationStartDate: '', registeredAddress: '',
     partners: [], businessObjective: '',
   });
-  const [messages, setMessages] = useState<{ role: 'user'|'bot'|'system', text: string }[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'bot' | 'system', text: string }[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  
-  // Preview editing toggle and handler
-  const [previewEditable, setPreviewEditable] = useState(false);
-  const handlePreviewUpdate = (idx: number, field: string, value: string) => {
-    setData(prev => {
-      const pts = [...prev.partners];
-      const p = pts[idx] ? { ...pts[idx] } : emptyPartner();
-      (p as any)[field] = value;
-      pts[idx] = p;
-      return { ...prev, partners: pts };
-    });
-  };
+  const [progress, setProgress] = useState(0);
+  const [isComplete, setIsComplete] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState<string | null>(null);
 
   const addBot = (text: string) => setMessages(prev => [...prev, { role: 'bot', text }]);
 
@@ -194,7 +152,7 @@ export default function DeedApp() {
       currentMsgs.push({ role: 'user', text: userText });
       setMessages(currentMsgs);
     }
-    
+
     setLoading(true);
     try {
       const apiMessages = currentMsgs.map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, content: m.text }));
@@ -210,26 +168,36 @@ export default function DeedApp() {
       const res = await r.json();
 
       if (res.extractedData) {
-         let newData = { ...data, ...res.extractedData };
-         
-         // Phase 1: If AI extracted numPartners but array isn't sized yet, initialize it
-         if (res.extractedData.numPartners && newData.partners.length !== res.extractedData.numPartners) {
-             newData.partners = Array.from({ length: res.extractedData.numPartners }, emptyPartner);
-         }
+        let newData = { ...data, ...res.extractedData };
 
-         if (res.extractedData.partners) {
-             const mergedPartners = [...newData.partners];
-             res.extractedData.partners.forEach((pUpdate: any, i: number) => {
-                 mergedPartners[i] = { ...(mergedPartners[i] || emptyPartner()), ...pUpdate };
-             });
-             newData.partners = mergedPartners;
-         }
-         setData(newData);
+        if (res.extractedData.numPartners && newData.partners.length !== (typeof res.extractedData.numPartners === 'string' ? parseInt(res.extractedData.numPartners) : res.extractedData.numPartners)) {
+          const num = typeof res.extractedData.numPartners === 'string' ? parseInt(res.extractedData.numPartners) : res.extractedData.numPartners;
+          newData.partners = Array.from({ length: num }, emptyPartner);
+        }
+
+        if (res.extractedData.partners) {
+          const mergedPartners = [...newData.partners];
+          res.extractedData.partners.forEach((pUpdate: any, i: number) => {
+            mergedPartners[i] = { ...(mergedPartners[i] || emptyPartner()), ...pUpdate };
+          });
+          newData.partners = mergedPartners;
+        }
+        setData(newData);
+      }
+
+      if (res.missingFields) {
+        // Calculate dynamic progress
+        const missingCount = res.missingFields.length;
+        // Base fields ~6 + (partners * 7)
+        const baseExpected = 7 + (data.numPartners || 2) * 7;
+        const calcProgress = Math.max(5, Math.min(100, Math.round(((baseExpected - missingCount) / baseExpected) * 100)));
+        setProgress(calcProgress);
+        if (missingCount === 0) setIsComplete(true);
       }
 
       if (res.content) {
-         currentMsgs.push({ role: 'bot', text: res.content });
-         setMessages(currentMsgs);
+        currentMsgs.push({ role: 'bot', text: res.content });
+        setMessages(currentMsgs);
       }
     } catch {
       addBot("Sorry, I encountered an error connecting to the AI.");
@@ -239,10 +207,10 @@ export default function DeedApp() {
 
   useEffect(() => {
     setMessages([
-      { role: 'bot', text: '⚖ Welcome! I am your AI assistant to help you draft your Partnership Deed.\nI will ask you for details one by one. You can upload ID cards or type the info manually.' }
+      { role: 'bot', text: '✨ Welcome to OnEasy Legal!\n\nI am your AI legal assistant. I will craft a perfect Partnership Deed for you by simply asking a few conversational questions.\n\nLet’s start building your document. Are you ready?' }
     ]);
-    processChat('', 'The user has just arrived. Please greet them briefly and ask for the number of partners or the business name.');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    processChat('', 'The user has just arrived. Greet them with a premium, reassuring tone and tell them we will quickly craft their Partnership Deed. Ask for the Number of Partners to begin.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -254,20 +222,33 @@ export default function DeedApp() {
     await processChat(v);
   };
 
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [activeUploadContext, setActiveUploadContext] = useState<'AADHAAR' | 'PAN'>('AADHAAR');
+
   const handleOCRUpload = async (file: File, type: 'AADHAAR' | 'PAN') => {
     setLoading(true);
-    addBot(`🔍 Reading ${type === 'AADHAAR' ? 'Aadhaar' : 'PAN'} card via OCR...`);
+    setOcrStatus('🔒 Encrypting document...');
+
+    // Progressive psychological loading state
+    const t1 = setTimeout(() => setOcrStatus('🔍 Analyzing securely with Gemini AI...'), 1200);
+    const t2 = setTimeout(() => setOcrStatus('📝 Extracting details...'), 2600);
+
     try {
       const extracted = type === 'AADHAAR' ? await ocrAadhaar(file) : await ocrPAN(file);
-      const details = type === 'AADHAAR' 
+      clearTimeout(t1); clearTimeout(t2);
+      setOcrStatus(null);
+
+      const details = type === 'AADHAAR'
         ? `Name: ${extracted.name}, Father: ${extracted.fatherName}, Age: ${extracted.age}, Address: ${extracted.address}`
-        : `PAN: ${extracted.pan}`;
-      
-      const hiddenContext = `The user just uploaded an ${type} card. The OCR system extracted these details: ${details}. Acknowledge this and seamlessly update the data using the tool, then ask for the next missing field.`;
-      
-      await processChat(`[Uploaded ${type} Card Image]`, hiddenContext);
-    } catch {
-      addBot('❌ Could not read the image. Please type the details manually.');
+        : `Name: ${extracted.name}, PAN: ${extracted.pan}, DOB: ${extracted.dob}`;
+
+      const hiddenContext = `The user uploaded an ${type} card. Gemini 2.0 Flash Lite extracted: ${details}. Praise the user for saving time with OCR, seamlessly update the data using the tool, and proceed to ask for the next missing field in the list.`;
+
+      await processChat(`[Uploaded ${type} Securely]`, hiddenContext);
+    } catch (err: any) {
+      clearTimeout(t1); clearTimeout(t2);
+      setOcrStatus(null);
+      addBot(`❌ Gemini AI could not read the image perfectly (${err?.message || 'Blurry or unreadable'}). Could you please try another photo or type the details instead?`);
       setLoading(false);
     }
   };
@@ -281,7 +262,6 @@ export default function DeedApp() {
   const [previewLoading, setPreviewLoading] = useState(false);
 
   const refreshPreview = useCallback(async (d: DeedData) => {
-    if (d.partners.length === 0) return;
     setPreviewLoading(true);
     try {
       const res = await fetch('/api/render-deed', {
@@ -297,168 +277,163 @@ export default function DeedApp() {
     setPreviewLoading(false);
   }, []);
 
-  // Refresh preview whenever deed data changes
   useEffect(() => { refreshPreview(data); }, [data, refreshPreview]);
 
   const handleDownloadPDF = async () => {
     const res = await fetch('/api/download-pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deedData: data }),
     });
-    if (!res.ok) { alert('PDF generation failed. Please try again.'); return; }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Deed_${(data.businessName || 'Firm').replace(/\s+/g,'_')}.pdf`;
-    a.click(); URL.revokeObjectURL(url);
+    if (!res.ok) { alert('PDF generation failed.'); return; }
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a'); a.href = url; a.download = `Partnership_Deed.pdf`; a.click(); URL.revokeObjectURL(url);
   };
 
   const handleDownloadDOCX = async () => {
     const res = await fetch('/api/download-docx', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deedData: data }),
     });
-    if (!res.ok) { alert('DOCX generation failed. Please try again.'); return; }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Deed_${(data.businessName || 'Firm').replace(/\s+/g,'_')}.docx`;
-    a.click(); URL.revokeObjectURL(url);
+    if (!res.ok) { alert('DOCX generation failed.'); return; }
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a'); a.href = url; a.download = `Partnership_Deed.docx`; a.click(); URL.revokeObjectURL(url);
   };
 
-  // Progress
-  const n = data.numPartners || Math.max(2, data.partners.length);
-  const requiredCount = [data.businessName, data.natureOfBusiness, data.durationStartDate, data.registeredAddress].filter(f => !!f).length + (data.partners.filter(p => p.fullName && p.fatherName && p.age && p.address).length * 2);
-  const totalRequired = 4 + (n * 2);
-  const progress = Math.min(100, Math.round((requiredCount / totalRequired) * 100));
-
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [activeUploadContext, setActiveUploadContext] = useState<'AADHAAR' | 'PAN'>('AADHAAR');
-
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: "'Segoe UI', sans-serif", background: '#e5e5e5' }}>
+    <div style={{ display: 'flex', height: '100vh', fontFamily: "'Inter', system-ui, sans-serif", background: '#f8fafc' }}>
 
       {/* ── LEFT CHAT PANEL ── */}
-      <div style={{ width: '380px', minWidth: '380px', display: 'flex', flexDirection: 'column', background: '#1a1a2e', color: '#fff', boxShadow: '4px 0 24px rgba(0,0,0,0.35)' }}>
+      <div style={{ width: '420px', minWidth: '420px', display: 'flex', flexDirection: 'column', background: BG_DARK, color: TEXT_LIGHT, boxShadow: '8px 0 30px rgba(0,0,0,0.15)', zIndex: 10 }}>
         {/* Header */}
-        <div style={{ padding: '18px 18px 14px', background: '#12122a', borderBottom: '1px solid #0f3460' }}>
-          <div style={{ fontSize: '14px', fontWeight: 800, color: '#d4a843', letterSpacing: '0.6px', marginBottom: '2px' }}>⚖ AI Partnership Deed Assistant</div>
-          <div style={{ fontSize: '10.5px', color: '#7a8494', marginBottom: '11px' }}>Indian Partnership Act, 1932</div>
-          <div style={{ background: '#0a2040', borderRadius: '3px', height: '4px' }}>
-            <div style={{ width: `${progress}%`, background: 'linear-gradient(90deg,#c9932a,#f0c060)', height: '100%', borderRadius: '3px', transition: 'width 0.5s' }} />
+        <div style={{ padding: '24px 20px 20px', background: PANEL_BG, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: `linear-gradient(135deg, ${ACCENT}, #2563eb)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', boxShadow: `0 4px 12px ${ACCENT_GLOW}` }}>⚖️</div>
+            <div>
+              <div style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.5px' }}>Deed AI Assistant</div>
+              <div style={{ fontSize: '12px', color: TEXT_MUTED }}>Dynamic Legal Drafting</div>
+            </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
-            <span style={{ fontSize: '10px', color: '#7a8494' }}>
-              {data.partners.length > 0 ? `${data.partners.length} partner(s)` : 'Getting started…'}
-            </span>
-            <span style={{ fontSize: '10px', color: '#d4a843', fontWeight: 600 }}>{progress}%</span>
+
+          <div style={{ background: '#1e293b', borderRadius: '8px', height: '6px', overflow: 'hidden', marginTop: '4px' }}>
+            <div style={{ width: `${progress}%`, background: `linear-gradient(90deg, #3b82f6, #60a5fa)`, height: '100%', borderRadius: '8px', transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: `0 0 10px ${ACCENT_GLOW}` }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: TEXT_MUTED, fontWeight: 500 }}>
+            <span>{isComplete ? 'All Requirements Met ✨' : 'Drafting in progress...'}</span>
+            <span style={{ color: ACCENT, fontWeight: 700 }}>{progress}%</span>
           </div>
         </div>
 
         {/* Messages */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '16px', scrollBehavior: 'smooth' }}>
           {messages.map((msg, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: '7px' }}>
+            <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: '10px', animation: 'fadeIn 0.3s ease-out' }}>
               {msg.role === 'bot' && (
-                <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#d4a843', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', flexShrink: 0 }}>⚖</div>
+                <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: `linear-gradient(135deg, #1e293b, #334155)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>🤖</div>
               )}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: '3px', maxWidth: '85%' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: '4px', maxWidth: '85%' }}>
                 <div style={{
-                  padding: '9px 12px',
-                  borderRadius: msg.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
-                  background: msg.role === 'user' ? '#d4a843' : '#1e2545',
-                  color: msg.role === 'user' ? '#12122a' : '#c8d0df',
-                  fontSize: '11.5px', lineHeight: 1.6,
-                  fontWeight: msg.role === 'user' ? 700 : 'normal' as any,
-                  border: msg.role === 'bot' ? '1px solid #2a3560' : 'none',
+                  padding: '12px 16px',
+                  borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                  background: msg.role === 'user' ? `linear-gradient(135deg, ${ACCENT}, #2563eb)` : '#1e293b',
+                  color: msg.role === 'user' ? '#ffffff' : '#f8fafc',
+                  fontSize: '13.5px', lineHeight: 1.6,
+                  fontWeight: 400,
+                  boxShadow: msg.role === 'user' ? `0 4px 14px ${ACCENT_GLOW}` : '0 4px 14px rgba(0,0,0,0.1)',
                   whiteSpace: 'pre-wrap',
                 }}>{msg.text}</div>
               </div>
             </div>
           ))}
-          {loading && (
-            <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
-              <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#d4a843', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px' }}>⚖</div>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                {[0,1,2].map(i => <div key={i} style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#d4a843', animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />)}
+          {ocrStatus && (
+            <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', gap: '10px', animation: 'fadeIn 0.3s ease-out' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: `linear-gradient(135deg, #1e293b, #334155)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>🤖</div>
+              <div style={{ padding: '12px 16px', borderRadius: '16px 16px 16px 4px', background: '#1e293b', color: '#f8fafc', fontSize: '13.5px', lineHeight: 1.6, boxShadow: '0 4px 14px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#3b82f6', animation: 'spin 1s linear infinite' }} />
+                <span style={{ fontWeight: 500 }}>{ocrStatus}</span>
+              </div>
+            </div>
+          )}
+          {loading && !ocrStatus && (
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', animation: 'fadeIn 0.3s ease-out' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: `linear-gradient(135deg, #1e293b, #334155)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', flexShrink: 0 }}>🤖</div>
+              <div style={{ padding: '14px 18px', borderRadius: '16px 16px 16px 4px', background: '#1e293b', display: 'flex', gap: '6px' }}>
+                {[0, 1, 2].map(i => <div key={i} style={{ width: '6px', height: '6px', borderRadius: '50%', background: ACCENT, animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite` }} />)}
               </div>
             </div>
           )}
           <div ref={chatEndRef} />
         </div>
 
-        {/* Input */}
-        <div style={{ padding: '12px', background: '#12122a', borderTop: '1px solid #1a2a4a' }}>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+        {/* Action Bar */}
+        <div style={{ padding: '16px', background: PANEL_BG, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
             <button onClick={() => { setActiveUploadContext('AADHAAR'); fileRef.current?.click(); }}
-              style={{ flex: 1, padding: '7px', borderRadius: '7px', border: '1px solid #2a3560', background: 'transparent', color: '#94a3b8', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>
-              📎 Upload Aadhaar
+              style={{ flex: 1, padding: '10px 8px', borderRadius: '10px', border: '1px solid rgba(96, 165, 250, 0.2)', background: 'rgba(59, 130, 246, 0.05)', color: '#93c5fd', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.2s' }}
+              onMouseOver={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'} onMouseOut={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.05)'}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ fontSize: '14px' }}>📄</span> Aadhaar Upload</div>
+              <div style={{ fontSize: '9px', fontWeight: 500, color: '#64748b', display: 'flex', alignItems: 'center', gap: '3px' }}><span>🔒</span> Secured by Gemini</div>
             </button>
             <button onClick={() => { setActiveUploadContext('PAN'); fileRef.current?.click(); }}
-              style={{ flex: 1, padding: '7px', borderRadius: '7px', border: '1px solid #2a3560', background: 'transparent', color: '#94a3b8', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>
-              📎 Upload PAN
+              style={{ flex: 1, padding: '10px 8px', borderRadius: '10px', border: '1px solid rgba(96, 165, 250, 0.2)', background: 'rgba(59, 130, 246, 0.05)', color: '#93c5fd', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.2s' }}
+              onMouseOver={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'} onMouseOut={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.05)'}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ fontSize: '14px' }}>💳</span> PAN Upload</div>
+              <div style={{ fontSize: '9px', fontWeight: 500, color: '#64748b', display: 'flex', alignItems: 'center', gap: '3px' }}><span>🔒</span> Secured by Gemini</div>
             </button>
-            <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf,.heic,.heif,.tiff,.tif" style={{ display: 'none' }}
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: 'none' }}
               onChange={e => { const f = e.target.files?.[0]; if (f) handleOCRUpload(f, activeUploadContext); }} />
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', background: '#020617', padding: '6px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
             <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="Type your answer…" rows={2}
-              style={{ flex: 1, background: '#0f1f3a', border: '1px solid #2a3560', borderRadius: '10px', padding: '9px 13px', fontSize: '11.5px', color: '#d4c090', outline: 'none', resize: 'none', lineHeight: 1.5, fontFamily: 'inherit' }} />
+              placeholder="Type your response here..." rows={1}
+              style={{ flex: 1, background: 'transparent', border: 'none', padding: '10px 14px', fontSize: '14px', color: TEXT_LIGHT, outline: 'none', resize: 'none', fontFamily: 'inherit' }} />
             <button onClick={handleSend} disabled={loading || !input.trim()}
-              style={{ background: loading || !input.trim() ? '#333' : '#d4a843', color: '#12122a', border: 'none', borderRadius: '10px', width: '42px', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', fontSize: '17px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>→</button>
+              style={{ background: loading || !input.trim() ? '#1e293b' : ACCENT, color: '#fff', border: 'none', borderRadius: '10px', width: '40px', height: '40px', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', boxShadow: loading || !input.trim() ? 'none' : `0 4px 12px ${ACCENT_GLOW}` }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
           </div>
-          <div style={{ fontSize: '9.5px', color: '#4a5572', marginTop: '4px' }}>Enter to submit • Shift+Enter for new line</div>
         </div>
-        {progress >= 100 && (
-          <div style={{ padding: '16px', background: '#12122a', borderTop: '1px solid #1a2a4a', textAlign: 'center' }}>
-            <div style={{ color: '#d4a843', fontSize: '13px', fontWeight: 700 }}>🎉 Deed Complete!</div>
-            <div style={{ color: '#7a8494', fontSize: '11px', marginTop: '4px' }}>Download it from the right panel</div>
-          </div>
-        )}
       </div>
 
       {/* ── RIGHT PREVIEW PANEL ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#e2e8f0' }}>
         {/* Toolbar */}
-        <div style={{ background: '#fff', borderBottom: '1px solid #ddd', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#1a1a2e' }}>📄 Live Document Preview</span>
-            {previewLoading && <span style={{ fontSize: '10px', color: '#888', background: '#f5f5f5', padding: '2px 10px', borderRadius: '10px', border: '1px solid #e0e0e0' }}>Refreshing…</span>}
-            {!previewLoading && data.partners.length > 0 && (
-              <span style={{ fontSize: '10px', color: PRIMARY, background: 'rgba(1,51,76,0.08)', padding: '2px 10px', borderRadius: '10px', fontWeight: 600 }}>
-                {data.partners.length} Partner{data.partners.length > 1 ? 's' : ''}
+        <div style={{ background: '#ffffff', borderBottom: '1px solid #cbd5e1', padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', zIndex: 5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <span style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px' }}>📄</span> Document Live Preview
+            </span>
+            {previewLoading && <span style={{ fontSize: '11px', color: '#64748b', background: '#f1f5f9', padding: '4px 12px', borderRadius: '12px', fontWeight: 600, border: '1px solid #e2e8f0' }}>Syncing...</span>}
+            {!previewLoading && isComplete && (
+              <span style={{ fontSize: '12px', color: '#16a34a', background: '#dcfce7', padding: '4px 12px', borderRadius: '12px', fontWeight: 600, border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '6px', height: '6px', background: '#16a34a', borderRadius: '50%' }}></span> Ready to Download
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '12px' }}>
             <button onClick={handleDownloadPDF} disabled={!iframeUrl}
-              style={{ background: iframeUrl ? '#b91c1c' : '#ccc', color: '#fff', border: 'none', borderRadius: '7px', padding: '8px 14px', cursor: iframeUrl ? 'pointer' : 'not-allowed', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.4px' }}>
-              📄 PDF
+              style={{ background: iframeUrl ? '#ef4444' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px', cursor: iframeUrl ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s', boxShadow: iframeUrl ? `0 4px 12px rgba(239, 68, 68, 0.3)` : 'none' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Download PDF
             </button>
             <button onClick={handleDownloadDOCX} disabled={!iframeUrl}
-              style={{ background: iframeUrl ? '#1d4ed8' : '#ccc', color: '#fff', border: 'none', borderRadius: '7px', padding: '8px 14px', cursor: iframeUrl ? 'pointer' : 'not-allowed', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.4px' }}>
-              📝 DOCX
+              style={{ background: iframeUrl ? '#2563eb' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px', cursor: iframeUrl ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s', boxShadow: iframeUrl ? `0 4px 12px rgba(37, 99, 235, 0.3)` : 'none' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Download DOCX
             </button>
           </div>
         </div>
         {/* iframe preview */}
-        <div style={{ flex: 1, overflow: 'hidden', background: '#ccc', display: 'flex', alignItems: 'stretch' }}>
-          {iframeUrl ? (
-            <iframe
-              src={iframeUrl}
-              style={{ flex: 1, border: 'none', background: '#fff' }}
-              title="Partnership Deed Preview"
-            />
-          ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: '13px' }}>
-              Your deed will appear here as you answer the questions.
-            </div>
-          )}
+        <div style={{ flex: 1, padding: '32px', overflowY: 'auto' }}>
+          <style>{`
+            @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
+            @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    `}</style>
+          <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', height: '100%', minHeight: '800px', background: '#ffffff', borderRadius: '12px', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+            {iframeUrl ? (
+              <iframe src={iframeUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="Preview" />
+            ) : (
+              <DeedPreview data={data} />
+            )}
+          </div>
         </div>
       </div>
     </div>
