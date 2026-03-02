@@ -26,7 +26,7 @@ export const POST: APIRoute = async ({ request }) => {
       supabase
         .from('deeds')
         .insert({ deed_data: deedData, rendered_html: html })
-        .then(({ error }) => { if (error) console.warn('[render-deed] Supabase insert:', error.message); });
+        .then(({ error }) => { if (error) console.debug('[render-deed] Supabase (optional):', error.message); });
     }
 
     return new Response(JSON.stringify({ html }), {

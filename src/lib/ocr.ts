@@ -38,24 +38,45 @@ async function pdfToBase64(file: File): Promise<{ base64: string; mimeType: stri
   return { base64: dataUrl.split(',')[1], mimeType: 'image/png' };
 }
 
-// ─── Generic file → base64  ───────────────────────────────────────────────────
+// ─── Normalize any image → JPEG via canvas (handles HEIC, BMP, AVIF, etc.) ───
+
+async function normalizeImageToJpeg(
+  file: File,
+): Promise<{ base64: string; mimeType: string }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      // Limit to 1200px wide (enough for OCR, keeps JSON small)
+      const MAX = 1200;
+      const scale = img.naturalWidth > MAX ? MAX / img.naturalWidth : 1;
+      const w = Math.round(img.naturalWidth  * scale);
+      const h = Math.round(img.naturalHeight * scale);
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = w;
+      canvas.height = h;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+
+      URL.revokeObjectURL(url);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image decode failed')); };
+    img.src = url;
+  });
+}
+
+// ─── File → base64 (PDF uses canvas render, images use normalizeImageToJpeg) ──
 
 async function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
   if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
     return pdfToBase64(file);
   }
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const mimeType = file.type || 'image/jpeg';
-      resolve({ base64: result.split(',')[1], mimeType });
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+  // All other image formats (including HEIC, BMP, AVIF) → normalize to JPEG via canvas
+  return normalizeImageToJpeg(file);
 }
+
 
 // ─── Public OCR functions ─────────────────────────────────────────────────────
 

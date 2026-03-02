@@ -1,29 +1,56 @@
 import type { APIRoute } from 'astro';
-import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createSign } from 'node:crypto';
 import Groq from 'groq-sdk';
 
 const groq = new Groq({ apiKey: import.meta.env.GROQ_API_KEY });
 
-// ─── Google Cloud Document AI client ─────────────────────────────────────────
-// Credentials: google-key.json in project root (GOOGLE_APPLICATION_CREDENTIALS=./google-key.json)
-// Processor:   GOOGLE_PROJECT_ID / GOOGLE_LOCATION / GOOGLE_PROCESSOR_ID in .env
+// ─── JWT auth for Google APIs (REST, no gRPC) ─────────────────────────────────
 
-// google-key.json (project root) = oneasyai service account = has Document AI access
-// GOOGLE_CREDENTIALS_FILE in .env is the OLD resumechecker account — don't use it for Doc AI
-function makeDocAIClient() {
-  const location = import.meta.env.GOOGLE_LOCATION || 'us';
-  // Priority 1: google-key.json in project root (oneasyai credentials with Doc AI access)
-  // Priority 2: GOOGLE_CREDENTIALS_FILE env var (fallback)
-  const keyFile  = resolve(process.cwd(), 'google-key.json');
-  return new DocumentProcessorServiceClient({
-    keyFilename: keyFile,
-    apiEndpoint: `${location}-documentai.googleapis.com`,
-  });
+function loadKey() {
+  const keyPath = resolve(process.cwd(), 'google-key.json');
+  const raw = JSON.parse(readFileSync(keyPath, 'utf8'));
+  return {
+    client_email: raw.client_email as string,
+    private_key:  raw.private_key  as string,
+    token_uri:    (raw.token_uri || 'https://oauth2.googleapis.com/token') as string,
+  };
 }
 
+async function getAccessToken(): Promise<string> {
+  const key = loadKey();
+  const now  = Math.floor(Date.now() / 1000);
+  const claim = {
+    iss:   key.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud:   key.token_uri,
+    iat:   now,
+    exp:   now + 3600,
+  };
+  const header  = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify(claim)).toString('base64url');
+  const sign    = createSign('RSA-SHA256');
+  sign.update(`${header}.${payload}`);
+  const sig = sign.sign(key.private_key, 'base64url');
+  const jwt = `${header}.${payload}.${sig}`;
 
-async function googleDocAiOcr(imageBase64: string, mimeType: string): Promise<string> {
+  const res  = await fetch(key.token_uri, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    }),
+  });
+  const data = await res.json() as { access_token?: string; error?: string };
+  if (!data.access_token) throw new Error(`JWT token error: ${data.error}`);
+  return data.access_token;
+}
+
+// ─── Google Cloud Document AI — REST (avoids gRPC issues in Vite SSR) ─────────
+
+async function documentAiOcr(imageBase64: string, mimeType: string): Promise<string> {
   const location    = import.meta.env.GOOGLE_LOCATION    || 'us';
   const projectId   = import.meta.env.GOOGLE_PROJECT_ID;
   const processorId = import.meta.env.GOOGLE_PROCESSOR_ID;
@@ -32,25 +59,73 @@ async function googleDocAiOcr(imageBase64: string, mimeType: string): Promise<st
     throw new Error('GOOGLE_PROJECT_ID and GOOGLE_PROCESSOR_ID must be set in .env');
   }
 
-  const processorName =
-    `projects/${projectId}/locations/${location}/processors/${processorId}`;
+  const token    = await getAccessToken();
+  const endpoint = `https://${location}-documentai.googleapis.com/v1/projects/${projectId}/locations/${location}/processors/${processorId}:process`;
 
-  const client = makeDocAIClient();
-
-  const [result] = await client.processDocument({
-    name: processorName,
-    rawDocument: {
-      content: Buffer.from(imageBase64, 'base64'),
-      mimeType: mimeType || 'image/jpeg',
+  // REST API — content is base64 string (NOT Buffer; that's for gRPC only)
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization:  `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify({
+      rawDocument: {
+        content:  imageBase64,      // base64 string as-is for REST
+        mimeType: normalizeMime(mimeType),
+      },
+    }),
   });
 
-  const text = result.document?.text || '';
-  console.log(`[ocr] Document AI OK — ${text.length} chars:`, text.slice(0, 200));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: { message: res.statusText }})) as any;
+    throw new Error(`Document AI ${res.status}: ${err?.error?.message || JSON.stringify(err)}`);
+  }
+
+  const json = await res.json() as any;
+  const text = json.document?.text || '';
+  console.log(`[ocr] Document AI REST OK — ${text.length} chars:`, text.slice(0, 150));
   return text;
 }
 
-// ─── Regex-first PAN / Aadhaar extraction ─────────────────────────────────────
+// ─── Normalize mimeType → only formats both APIs accept ───────────────────────
+
+function normalizeMime(mimeType: string): string {
+  const m = (mimeType || '').toLowerCase();
+  if (m.includes('pdf'))               return 'application/pdf';
+  if (m.includes('png'))               return 'image/png';
+  if (m.includes('tiff') || m.includes('tif')) return 'image/tiff';
+  if (m.includes('gif'))               return 'image/gif';
+  if (m.includes('webp'))              return 'image/webp';
+  // HEIC, BMP, AVIF, unknown → force JPEG (client always converts to JPEG for non-PDF)
+  return 'image/jpeg';
+}
+
+// ─── Groq Vision fallback ─────────────────────────────────────────────────────
+
+async function groqVisionFallback(
+  imageBase64: string, mimeType: string, docType: string
+): Promise<string> {
+  const safeMime = normalizeMime(mimeType);
+  const completion = await groq.chat.completions.create({
+    model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: `data:${safeMime};base64,${imageBase64}` } },
+        {
+          type: 'text',
+          text: `Read ALL visible text on this Indian ${docType === 'aadhaar' ? 'Aadhaar' : 'PAN'} card image, line by line. Include every word, number, and label.`,
+        },
+      ],
+    }],
+    max_tokens: 600,
+    temperature: 0.1,
+  });
+  return completion.choices[0]?.message?.content || '';
+}
+
+// ─── Regex extraction (PAN / Aadhaar) ────────────────────────────────────────
 
 const PAN_RX  = /[A-Z]{5}[0-9]{4}[A-Z]/;
 const AADH_RX = /\d{4}[\s-]?\d{4}[\s-]?\d{4}/;
@@ -82,22 +157,23 @@ async function extractFields(rawText: string, docType: 'aadhaar' | 'pan') {
     ? '{"name":"","fatherName":"","dob":"DD/MM/YYYY or empty","age":"","gender":"Male/Female","address":""}'
     : '{"name":"","fatherName":"","dob":"DD/MM/YYYY or empty"}';
 
-  const sysPrompt = [
-    `Extract fields from Indian ${docType === 'aadhaar' ? 'Aadhaar' : 'PAN'} card OCR text.`,
-    `Return ONLY this JSON (no markdown):\n${schema}`,
-    '- name: full name of card holder',
-    '- fatherName: from S/O, D/O, W/O field',
-    '- dob: DD/MM/YYYY format',
-    '- age: calculate from DOB if not explicit',
-    '- address: complete address string (Aadhaar only)',
-    'Do NOT fabricate. Use empty string for missing fields.',
-  ].join('\n');
-
   const completion = await groq.chat.completions.create({
     model: 'llama-3.1-8b-instant',
     messages: [
-      { role: 'system', content: sysPrompt },
-      { role: 'user',   content: `OCR TEXT:\n${rawText.slice(0, 2500)}` },
+      {
+        role: 'system',
+        content: [
+          `Extract fields from Indian ${docType === 'aadhaar' ? 'Aadhaar' : 'PAN'} card OCR text.`,
+          `Return ONLY this JSON (no markdown):\n${schema}`,
+          '- name: full name of card holder',
+          '- fatherName: from S/O, D/O, W/O field',
+          '- dob: DD/MM/YYYY format',
+          '- age: calculate from DOB if not explicit',
+          '- address: complete address string (Aadhaar only)',
+          'Do NOT fabricate. Use empty string for missing fields.',
+        ].join('\n'),
+      },
+      { role: 'user', content: `OCR TEXT:\n${rawText.slice(0, 2500)}` },
     ],
     max_tokens: 300,
     temperature: 0.1,
@@ -112,29 +188,6 @@ async function extractFields(rawText: string, docType: 'aadhaar' | 'pan') {
   }
 }
 
-// ─── Groq Vision fallback ─────────────────────────────────────────────────────
-
-async function groqVisionFallback(
-  imageBase64: string, mimeType: string, docType: string
-): Promise<string> {
-  const completion = await groq.chat.completions.create({
-    model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-        {
-          type: 'text',
-          text: `Read ALL visible text on this Indian ${docType === 'aadhaar' ? 'Aadhaar' : 'PAN'} card image. Return only the raw text, line by line. Include every word, number, and label.`,
-        },
-      ],
-    }],
-    max_tokens: 600,
-    temperature: 0.1,
-  });
-  return completion.choices[0]?.message?.content || '';
-}
-
 // ─── Route ────────────────────────────────────────────────────────────────────
 
 export const POST: APIRoute = async ({ request }) => {
@@ -145,21 +198,30 @@ export const POST: APIRoute = async ({ request }) => {
       docType: 'aadhaar' | 'pan';
     };
 
-    // ── Stage 1: Google Cloud Document AI (primary) ──
+    console.log(`[ocr] Received: docType=${docType}, mimeType=${mimeType}, base64len=${imageBase64?.length ?? 0}`);
+
+    if (!imageBase64 || imageBase64.length < 100) {
+      return new Response(
+        JSON.stringify({ data: {}, error: 'Image data is empty or too small' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── Stage 1: Google Cloud Document AI REST ──
     let rawText = '';
     let source  = 'document_ai';
 
     try {
-      rawText = await googleDocAiOcr(imageBase64, mimeType);
-    } catch (docAiErr: any) {
-      console.warn('[ocr] Document AI failed, falling back to Groq Vision:', docAiErr?.message);
+      rawText = await documentAiOcr(imageBase64, mimeType);
+    } catch (docErr: any) {
+      console.warn('[ocr] Document AI failed:', docErr?.message);
       source = 'groq_vision';
       try {
         rawText = await groqVisionFallback(imageBase64, mimeType, docType);
         console.log(`[ocr] Groq Vision fallback OK — ${rawText.length} chars`);
       } catch (groqErr: any) {
         throw new Error(
-          `Both OCR services failed.\nDocument AI: ${docAiErr?.message}\nGroq Vision: ${groqErr?.message}`
+          `Both OCR services failed.\nDocument AI: ${docErr?.message}\nGroq Vision: ${groqErr?.message}`
         );
       }
     }
@@ -173,14 +235,13 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // ── Stage 2: Regex number extraction (zero hallucination) ──
+    // ── Stage 2: Regex number extraction ──
     const pan     = docType === 'pan'     ? extractPAN(rawText)     : null;
     const aadhaar = docType === 'aadhaar' ? extractAadhaar(rawText) : null;
 
     // ── Stage 3: Groq text model — name / dob / address ──
     const fields = await extractFields(rawText, docType);
 
-    // Auto-calculate age from DOB if missing
     let age = fields.age || '';
     if (!age && fields.dob) {
       const parts = (fields.dob as string).split(/[\/\-]/);
@@ -191,21 +252,8 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const data = docType === 'aadhaar'
-      ? {
-          name:             fields.name      || '',
-          fatherName:       fields.fatherName || '',
-          dob:              fields.dob        || '',
-          age,
-          gender:           fields.gender    || '',
-          address:          fields.address   || '',
-          aadhaarStored:    !!aadhaar,
-        }
-      : {
-          name:             fields.name      || '',
-          fatherName:       fields.fatherName || '',
-          dob:              fields.dob        || '',
-          pan:              pan               || '',
-        };
+      ? { name: fields.name||'', fatherName: fields.fatherName||'', dob: fields.dob||'', age, gender: fields.gender||'', address: fields.address||'', aadhaarStored: !!aadhaar }
+      : { name: fields.name||'', fatherName: fields.fatherName||'', dob: fields.dob||'', pan: pan||'' };
 
     return new Response(JSON.stringify({ data }), {
       status: 200,
