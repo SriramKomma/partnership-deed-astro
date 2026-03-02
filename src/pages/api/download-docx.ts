@@ -15,7 +15,8 @@ const ORDINALS = [
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
 const FONT  = 'Verdana';
-const PT    = (pt: number) => pt * 20; // half-points (OOXML)
+const FONT_PT  = (pt: number) => pt * 2; // font size in half-points
+const SPACE_PT = (pt: number) => pt * 20; // spacing in twips (1/20 of a pt)
 const INCH  = convertInchesToTwip;
 
 function run(text: string, opts: {
@@ -24,7 +25,7 @@ function run(text: string, opts: {
   return new TextRun({
     text,
     font: FONT,
-    size: PT(opts.size ?? 11),
+    size: FONT_PT(opts.size ?? 12),
     bold: opts.bold,
     underline: opts.underline ? { type: UnderlineType.SINGLE } : undefined,
   });
@@ -37,7 +38,7 @@ function para(
   return new Paragraph({
     alignment: opts.align ?? AlignmentType.JUSTIFIED,
     indent: opts.indent ? { left: INCH(opts.indent) } : undefined,
-    spacing: { after: PT(opts.spacing ?? 6) },
+    spacing: { after: SPACE_PT(opts.spacing ?? 6) },
     children: Array.isArray(runs) ? runs : [runs],
   });
 }
@@ -60,11 +61,11 @@ function buildDoc(data: DeedData): Document {
   children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: PT(12) },
+      spacing: { after: SPACE_PT(12) },
       children: [
         new TextRun({
           text: 'PARTNERSHIP DEED',
-          font: FONT, bold: true, size: PT(11),
+          font: FONT, bold: true, size: FONT_PT(16),
           underline: { type: UnderlineType.SINGLE },
         }),
       ],
@@ -89,7 +90,7 @@ function buildDoc(data: DeedData): Document {
       new Paragraph({
         alignment: AlignmentType.JUSTIFIED,
         numbering: { reference: 'partnerList', level: 0 },
-        spacing: { after: PT(6) },
+        spacing: { after: SPACE_PT(6) },
         children: [
           run(p.fullName, { bold: true }),
           run(p.fatherName ? ` S/O ${p.fatherName}` : ''),
@@ -125,7 +126,7 @@ function buildDoc(data: DeedData): Document {
     new Paragraph({
       numbering: { reference: 'clauseList', level: 0 },
       alignment: AlignmentType.JUSTIFIED,
-      spacing: { after: PT(6) },
+      spacing: { after: SPACE_PT(6) },
       children: [
         run('The partnership business shall be carried on under the name and style as '),
         run(`M/s. ${businessName}.`, { bold: true }),
@@ -148,7 +149,7 @@ function buildDoc(data: DeedData): Document {
     new Paragraph({
       numbering: { reference: 'clauseList', level: 0 },
       alignment: AlignmentType.JUSTIFIED,
-      spacing: { after: PT(6) },
+      spacing: { after: SPACE_PT(6) },
       children: [
         run('The '),
         run('Principal place of business', { bold: true }),
@@ -165,7 +166,7 @@ function buildDoc(data: DeedData): Document {
     new Paragraph({
       numbering: { reference: 'clauseList', level: 0 },
       alignment: AlignmentType.JUSTIFIED,
-      spacing: { after: PT(6) },
+      spacing: { after: SPACE_PT(6) },
       children: [
         run('The '),
         run('objective of partnership', { bold: true }),
@@ -176,7 +177,7 @@ function buildDoc(data: DeedData): Document {
     new Paragraph({
       numbering: { reference: 'subClauseList', level: 0 },
       alignment: AlignmentType.JUSTIFIED,
-      spacing: { after: PT(6) },
+      spacing: { after: SPACE_PT(6) },
       children: [run(businessObjective)],
     }),
     blank(),
@@ -187,7 +188,7 @@ function buildDoc(data: DeedData): Document {
     new Paragraph({
       numbering: { reference: 'clauseList', level: 0 },
       alignment: AlignmentType.JUSTIFIED,
-      spacing: { after: PT(6) },
+      spacing: { after: SPACE_PT(6) },
       children: [run('Capital Contribution of the Partners:', { bold: true })],
     }),
     para([run('The total capital contribution of the partners in the firm shall be in the following proportions:')], { indent: 0.25 }),
@@ -213,7 +214,7 @@ function buildDoc(data: DeedData): Document {
     new Paragraph({
       numbering: { reference: 'clauseList', level: 0 },
       alignment: AlignmentType.JUSTIFIED,
-      spacing: { after: PT(6) },
+      spacing: { after: SPACE_PT(6) },
       children: [
         run(`The parties of the ${mpText} shall be the `),
         run(`managing partner's`, { bold: true }),
@@ -241,7 +242,7 @@ function buildDoc(data: DeedData): Document {
       new Paragraph({
         numbering: { reference: 'subClauseList', level: 0 },
         alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: PT(4) },
+        spacing: { after: SPACE_PT(4) },
         children: [run(text)],
       }),
     );
@@ -257,7 +258,7 @@ function buildDoc(data: DeedData): Document {
     new Paragraph({
       numbering: { reference: 'clauseList', level: 0 },
       alignment: AlignmentType.JUSTIFIED,
-      spacing: { after: PT(6) },
+      spacing: { after: SPACE_PT(6) },
       children: [
         run(`The firm shall maintain one or more banking accounts (e.g., current accounts, overdrafts, cash credit, etc.) as may be decided by the partners from time to time. The said bank accounts shall be operated jointly by ${bpText}. The signatures of all authorized partners shall be jointly required for the issuance and authorization of cheques or any other banking transactions. No transaction shall be deemed valid unless signed by all authorized partners.`),
       ],
@@ -286,7 +287,7 @@ function buildDoc(data: DeedData): Document {
         new Paragraph({
           numbering: { reference: 'clauseList', level: 0 },
           alignment: AlignmentType.JUSTIFIED,
-          spacing: { after: PT(6) },
+          spacing: { after: SPACE_PT(6) },
           children: [run(text)],
         }),
         blank(),
@@ -306,7 +307,7 @@ function buildDoc(data: DeedData): Document {
         new Paragraph({
           numbering: { reference: 'clauseList', level: 0 },
           alignment: AlignmentType.JUSTIFIED,
-          spacing: { after: PT(6) },
+          spacing: { after: SPACE_PT(6) },
           children: [run(parts[0])],
         }),
       );
@@ -353,12 +354,12 @@ function buildDoc(data: DeedData): Document {
     blank(),
     new Paragraph({
       border: { left: { color: 'F9A825', size: 12, space: 6, style: 'single' } },
-      spacing: { before: PT(12), after: PT(6) },
+      spacing: { before: SPACE_PT(12), after: SPACE_PT(6) },
       shading: { fill: 'FFF8E1' },
       children: [
         new TextRun({
           text: 'Disclaimer: This document is generated based on user input and must be reviewed by a qualified legal professional before execution.',
-          font: FONT, size: PT(9), color: '555555',
+          font: FONT, size: FONT_PT(10), color: '555555',
           bold: true,
         }),
       ],
