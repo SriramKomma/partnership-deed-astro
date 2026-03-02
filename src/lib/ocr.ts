@@ -14,21 +14,20 @@ export interface PartnerOCR {
 // ─── PDF → PNG conversion  (client-side, uses pdfjs-dist) ────────────────────
 
 async function pdfToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
-  // Dynamically import pdfjs-dist to avoid SSR issues
   const pdfjsLib = await import('pdfjs-dist');
 
-  // Point the worker at the bundled worker file via CDN (no extra bundler config needed)
+  // ✅ jsdelivr always serves from npm — works for every pdfjs-dist version including v5.x
+  // cloudflare CDN is typically weeks behind and 404s for new releases
   pdfjsLib.GlobalWorkerOptions.workerSrc =
-    `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+    `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const page = await pdf.getPage(1); // only first page needed for ID cards
+  const page = await pdf.getPage(1);
 
-  // Scale 2× for higher resolution → better OCR accuracy
-  const viewport = page.getViewport({ scale: 2.5 });
+  const viewport = page.getViewport({ scale: 2.0 });  // 2x is enough for OCR
   const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
+  canvas.width  = viewport.width;
   canvas.height = viewport.height;
 
   const ctx = canvas.getContext('2d')!;
@@ -37,6 +36,7 @@ async function pdfToBase64(file: File): Promise<{ base64: string; mimeType: stri
   const dataUrl = canvas.toDataURL('image/png');
   return { base64: dataUrl.split(',')[1], mimeType: 'image/png' };
 }
+
 
 // ─── Normalize any image → JPEG via canvas (handles HEIC, BMP, AVIF, etc.) ───
 
