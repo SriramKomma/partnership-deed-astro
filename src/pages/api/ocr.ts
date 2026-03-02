@@ -9,21 +9,24 @@ const groq = new Groq({ apiKey: import.meta.env.GROQ_API_KEY });
 // Credentials: google-key.json in project root (GOOGLE_APPLICATION_CREDENTIALS=./google-key.json)
 // Processor:   GOOGLE_PROJECT_ID / GOOGLE_LOCATION / GOOGLE_PROCESSOR_ID in .env
 
+// google-key.json (project root) = oneasyai service account = has Document AI access
+// GOOGLE_CREDENTIALS_FILE in .env is the OLD resumechecker account — don't use it for Doc AI
 function makeDocAIClient() {
-  const location = process.env.GOOGLE_LOCATION || 'us';
-  // Use google-key.json in the project root (already set in GOOGLE_APPLICATION_CREDENTIALS)
-  const keyFile  = process.env.GOOGLE_CREDENTIALS_FILE ||
-                   resolve(process.cwd(), 'google-key.json');
+  const location = import.meta.env.GOOGLE_LOCATION || 'us';
+  // Priority 1: google-key.json in project root (oneasyai credentials with Doc AI access)
+  // Priority 2: GOOGLE_CREDENTIALS_FILE env var (fallback)
+  const keyFile  = resolve(process.cwd(), 'google-key.json');
   return new DocumentProcessorServiceClient({
     keyFilename: keyFile,
     apiEndpoint: `${location}-documentai.googleapis.com`,
   });
 }
 
+
 async function googleDocAiOcr(imageBase64: string, mimeType: string): Promise<string> {
-  const location    = process.env.GOOGLE_LOCATION    || 'us';
-  const projectId   = process.env.GOOGLE_PROJECT_ID;
-  const processorId = process.env.GOOGLE_PROCESSOR_ID;
+  const location    = import.meta.env.GOOGLE_LOCATION    || 'us';
+  const projectId   = import.meta.env.GOOGLE_PROJECT_ID;
+  const processorId = import.meta.env.GOOGLE_PROCESSOR_ID;
 
   if (!projectId || !processorId) {
     throw new Error('GOOGLE_PROJECT_ID and GOOGLE_PROCESSOR_ID must be set in .env');
