@@ -1,117 +1,64 @@
 import type { APIRoute } from 'astro';
-import { readFileSync } from 'node:fs';
+import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
+import { resolve } from 'node:path';
 import Groq from 'groq-sdk';
 
 const groq = new Groq({ apiKey: import.meta.env.GROQ_API_KEY });
 
-// ─── Google Cloud Document AI via REST API ───────────────────────────────────
+// ─── Google Cloud Document AI client ─────────────────────────────────────────
+// Credentials: google-key.json in project root (GOOGLE_APPLICATION_CREDENTIALS=./google-key.json)
+// Processor:   GOOGLE_PROJECT_ID / GOOGLE_LOCATION / GOOGLE_PROCESSOR_ID in .env
 
-interface ServiceAccountKey {
-  client_email: string;
-  private_key: string;
-  token_uri: string;
-}
-
-function loadCredentials(): ServiceAccountKey {
-  // GOOGLE_CREDENTIALS_FILE = single-line file path in .env (avoids multiline JSON parse issue)
-  const filePath = import.meta.env.GOOGLE_CREDENTIALS_FILE ||
-                   process.env.GOOGLE_CREDENTIALS_FILE;
-  if (!filePath) throw new Error('GOOGLE_CREDENTIALS_FILE env var not set');
-
-  const raw = readFileSync(filePath, 'utf8');
-  const creds = JSON.parse(raw);
-  return {
-    client_email: creds.client_email,
-    private_key:  creds.private_key,                    // file already has real newlines
-    token_uri:    creds.token_uri || 'https://oauth2.googleapis.com/token',
-  };
-}
-
-async function getAccessToken(creds: ServiceAccountKey): Promise<string> {
-  // Build JWT using Web Crypto (available in Node 18+)
-  const now  = Math.floor(Date.now() / 1000);
-  const claim = {
-    iss: creds.client_email,
-    scope: 'https://www.googleapis.com/auth/cloud-platform',  // Document AI scope
-    aud: creds.token_uri,
-    iat: now,
-    exp: now + 3600,
-  };
-
-  const header  = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
-  const payload = Buffer.from(JSON.stringify(claim)).toString('base64url');
-  const sigInput = `${header}.${payload}`;
-
-  // Sign with RSA-SHA256 using Node crypto
-  const { createSign } = await import('node:crypto');
-  const sign = createSign('RSA-SHA256');
-  sign.update(sigInput);
-  const signature = sign.sign(creds.private_key, 'base64url');
-
-  const jwt = `${sigInput}.${signature}`;
-
-  const res = await fetch(creds.token_uri, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt,
-    }),
+function makeDocAIClient() {
+  const location = process.env.GOOGLE_LOCATION || 'us';
+  // Use google-key.json in the project root (already set in GOOGLE_APPLICATION_CREDENTIALS)
+  const keyFile  = process.env.GOOGLE_CREDENTIALS_FILE ||
+                   resolve(process.cwd(), 'google-key.json');
+  return new DocumentProcessorServiceClient({
+    keyFilename: keyFile,
+    apiEndpoint: `${location}-documentai.googleapis.com`,
   });
-  const data = await res.json() as { access_token?: string; error?: string };
-  if (!data.access_token) throw new Error(`Token error: ${data.error}`);
-  return data.access_token;
 }
 
-async function googleDocumentAIOcr(imageBase64: string, mimeType: string): Promise<string> {
-  const creds = loadCredentials();
-  const token = await getAccessToken(creds);
-
-  const projectId  = import.meta.env.GOOGLE_PROJECT_ID   || process.env.GOOGLE_PROJECT_ID;
-  const location   = import.meta.env.GOOGLE_LOCATION     || process.env.GOOGLE_LOCATION   || 'us';
-  const processorId = import.meta.env.GOOGLE_PROCESSOR_ID || process.env.GOOGLE_PROCESSOR_ID;
+async function googleDocAiOcr(imageBase64: string, mimeType: string): Promise<string> {
+  const location    = process.env.GOOGLE_LOCATION    || 'us';
+  const projectId   = process.env.GOOGLE_PROJECT_ID;
+  const processorId = process.env.GOOGLE_PROCESSOR_ID;
 
   if (!projectId || !processorId) {
-    throw new Error('GOOGLE_PROJECT_ID or GOOGLE_PROCESSOR_ID env var not set');
+    throw new Error('GOOGLE_PROJECT_ID and GOOGLE_PROCESSOR_ID must be set in .env');
   }
 
-  const endpoint = `https://${location}-documentai.googleapis.com/v1/projects/${projectId}/locations/${location}/processors/${processorId}:process`;
+  const processorName =
+    `projects/${projectId}/locations/${location}/processors/${processorId}`;
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+  const client = makeDocAIClient();
+
+  const [result] = await client.processDocument({
+    name: processorName,
+    rawDocument: {
+      content: Buffer.from(imageBase64, 'base64'),
+      mimeType: mimeType || 'image/jpeg',
     },
-    body: JSON.stringify({
-      rawDocument: {
-        content: imageBase64,
-        mimeType: mimeType || 'image/jpeg',
-      },
-    }),
   });
 
-  const json = await res.json() as any;
-  if (json.error) throw new Error(`Document AI: ${json.error.message || JSON.stringify(json.error)}`);
-
-  // Document AI returns document.text — plain text of the whole document
-  const text = json.document?.text || '';
-  console.log(`[ocr] Document AI raw text (${text.length} chars):`, text.slice(0, 200));
+  const text = result.document?.text || '';
+  console.log(`[ocr] Document AI OK — ${text.length} chars:`, text.slice(0, 200));
   return text;
 }
 
-// ─── Regex-first PAN / Aadhaar ────────────────────────────────────────────────
+// ─── Regex-first PAN / Aadhaar extraction ─────────────────────────────────────
 
 const PAN_RX  = /[A-Z]{5}[0-9]{4}[A-Z]/;
 const AADH_RX = /\d{4}[\s-]?\d{4}[\s-]?\d{4}/;
-const OCR_FIX: Record<string, string> = { O:'0', I:'1', l:'1', B:'8', S:'5' };
+const OCR_FIX: Record<string, string> = { O: '0', I: '1', l: '1', B: '8', S: '5' };
 
 function extractPAN(text: string): string | null {
   const direct = text.match(PAN_RX);
   if (direct) return direct[0];
   for (const chunk of text.match(/[A-Za-z0-9]{10}/g) || []) {
-    const c = chunk.slice(0,5).toUpperCase() +
-              chunk.slice(5,9).replace(/[OIlBS]/g, x => OCR_FIX[x]??x) +
+    const c = chunk.slice(0, 5).toUpperCase() +
+              chunk.slice(5, 9).replace(/[OIlBS]/g, x => OCR_FIX[x] ?? x) +
               chunk.slice(9).toUpperCase();
     if (PAN_RX.test(c)) return c;
   }
@@ -132,14 +79,22 @@ async function extractFields(rawText: string, docType: 'aadhaar' | 'pan') {
     ? '{"name":"","fatherName":"","dob":"DD/MM/YYYY or empty","age":"","gender":"Male/Female","address":""}'
     : '{"name":"","fatherName":"","dob":"DD/MM/YYYY or empty"}';
 
+  const sysPrompt = [
+    `Extract fields from Indian ${docType === 'aadhaar' ? 'Aadhaar' : 'PAN'} card OCR text.`,
+    `Return ONLY this JSON (no markdown):\n${schema}`,
+    '- name: full name of card holder',
+    '- fatherName: from S/O, D/O, W/O field',
+    '- dob: DD/MM/YYYY format',
+    '- age: calculate from DOB if not explicit',
+    '- address: complete address string (Aadhaar only)',
+    'Do NOT fabricate. Use empty string for missing fields.',
+  ].join('\n');
+
   const completion = await groq.chat.completions.create({
     model: 'llama-3.1-8b-instant',
     messages: [
-      {
-        role: 'system',
-        content: `Extract fields from Indian ${docType === 'aadhaar' ? 'Aadhaar' : 'PAN'} card OCR text. Return ONLY this JSON (no markdown):\n${schema}\n- name: full name of card holder\n- fatherName: from S/O, D/O, W/O field\n- dob: DD/MM/YYYY format\n- age: calculate from DOB if not explicit\n- address: complete address string (Aadhaar only)\nDo NOT fabricate. Use empty string for missing fields.`,
-      },
-      { role: 'user', content: `OCR TEXT:\n${rawText.slice(0, 2500)}` },
+      { role: 'system', content: sysPrompt },
+      { role: 'user',   content: `OCR TEXT:\n${rawText.slice(0, 2500)}` },
     ],
     max_tokens: 300,
     temperature: 0.1,
@@ -154,46 +109,59 @@ async function extractFields(rawText: string, docType: 'aadhaar' | 'pan') {
   }
 }
 
+// ─── Groq Vision fallback ─────────────────────────────────────────────────────
+
+async function groqVisionFallback(
+  imageBase64: string, mimeType: string, docType: string
+): Promise<string> {
+  const completion = await groq.chat.completions.create({
+    model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+        {
+          type: 'text',
+          text: `Read ALL visible text on this Indian ${docType === 'aadhaar' ? 'Aadhaar' : 'PAN'} card image. Return only the raw text, line by line. Include every word, number, and label.`,
+        },
+      ],
+    }],
+    max_tokens: 600,
+    temperature: 0.1,
+  });
+  return completion.choices[0]?.message?.content || '';
+}
+
 // ─── Route ────────────────────────────────────────────────────────────────────
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const { imageBase64, mimeType: _mimeType, docType } = await request.json() as {
+    const { imageBase64, mimeType, docType } = await request.json() as {
       imageBase64: string;
       mimeType: string;
       docType: 'aadhaar' | 'pan';
     };
 
-    // Stage 1: Google Cloud Document AI (primary)
+    // ── Stage 1: Google Cloud Document AI (primary) ──
     let rawText = '';
-    let visionSource = 'documentai';
+    let source  = 'document_ai';
+
     try {
-      rawText = await googleDocumentAIOcr(imageBase64, _mimeType);
-      console.log(`[ocr] Document AI OK (${rawText.length} chars)`);
-    } catch (gErr: any) {
-      // Fallback to Groq Vision if Google Vision fails (billing, quota, etc.)
-      console.warn('[ocr] Google Vision failed, falling back to Groq Vision:', gErr?.message);
-      visionSource = 'groq';
+      rawText = await googleDocAiOcr(imageBase64, mimeType);
+    } catch (docAiErr: any) {
+      console.warn('[ocr] Document AI failed, falling back to Groq Vision:', docAiErr?.message);
+      source = 'groq_vision';
       try {
-        const fallback = await groq.chat.completions.create({
-          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: `data:${_mimeType};base64,${imageBase64}` } },
-              { type: 'text', text: `Read ALL the text you can see on this Indian ${docType === 'aadhaar' ? 'Aadhaar' : 'PAN'} card image. Return only the raw text, line by line. Include every word, number, and label visible.` },
-            ],
-          }],
-          max_tokens: 600,
-          temperature: 0.1,
-        });
-        rawText = fallback.choices[0]?.message?.content || '';
-        console.log(`[ocr] Groq Vision fallback OK (${rawText.length} chars)`);
-      } catch (gqErr: any) {
-        throw new Error(`Both OCR services failed. Google: ${gErr?.message}. Groq: ${gqErr?.message}`);
+        rawText = await groqVisionFallback(imageBase64, mimeType, docType);
+        console.log(`[ocr] Groq Vision fallback OK — ${rawText.length} chars`);
+      } catch (groqErr: any) {
+        throw new Error(
+          `Both OCR services failed.\nDocument AI: ${docAiErr?.message}\nGroq Vision: ${groqErr?.message}`
+        );
       }
     }
-    console.log(`[ocr] Source: ${visionSource} | Text preview:`, rawText.slice(0, 150));
+
+    console.log(`[ocr] source=${source} | preview:`, rawText.slice(0, 120));
 
     if (!rawText.trim()) {
       return new Response(
@@ -202,13 +170,14 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // Stage 2: Regex-first number extraction
+    // ── Stage 2: Regex number extraction (zero hallucination) ──
     const pan     = docType === 'pan'     ? extractPAN(rawText)     : null;
     const aadhaar = docType === 'aadhaar' ? extractAadhaar(rawText) : null;
 
-    // Stage 3: Groq — name / father / DOB / address
+    // ── Stage 3: Groq text model — name / dob / address ──
     const fields = await extractFields(rawText, docType);
 
+    // Auto-calculate age from DOB if missing
     let age = fields.age || '';
     if (!age && fields.dob) {
       const parts = (fields.dob as string).split(/[\/\-]/);
@@ -219,15 +188,28 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const data = docType === 'aadhaar'
-      ? { name: fields.name||'', fatherName: fields.fatherName||'', dob: fields.dob||'', age, gender: fields.gender||'', address: fields.address||'', aadhaarStored: !!aadhaar }
-      : { name: fields.name||'', fatherName: fields.fatherName||'', dob: fields.dob||'', pan: pan||'' };
+      ? {
+          name:             fields.name      || '',
+          fatherName:       fields.fatherName || '',
+          dob:              fields.dob        || '',
+          age,
+          gender:           fields.gender    || '',
+          address:          fields.address   || '',
+          aadhaarStored:    !!aadhaar,
+        }
+      : {
+          name:             fields.name      || '',
+          fatherName:       fields.fatherName || '',
+          dob:              fields.dob        || '',
+          pan:              pan               || '',
+        };
 
     return new Response(JSON.stringify({ data }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err: any) {
-    console.error('[ocr] Error:', err?.message);
+    console.error('[ocr] Unhandled error:', err?.message);
     return new Response(JSON.stringify({ data: {}, error: err?.message }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
