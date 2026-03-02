@@ -70,6 +70,8 @@ function UploadCard({
       }}>
         {state === 'done' ? fileName : labels[state]}
       </div>
+
+      
     </div>
   );
 }
@@ -80,12 +82,15 @@ export default function OCRStep({ partnerIndex, totalPartners, initial, onDone }
   const [panState, setPanState] = useState<UploadState>('idle');
   const [aadhaarFile, setAadhaarFile] = useState('');
   const [panFile, setPanFile] = useState('');
+  const [aadhaarFileObj, setAadhaarFileObj] = useState<File | null>(null);
+  const [panFileObj, setPanFileObj] = useState<File | null>(null);
   const [error, setError] = useState('');
 
   const upd = (key: keyof PartnerOCR) => (v: string) => setData(d => ({ ...d, [key]: v }));
 
   const handleAadhaar = async (file: File) => {
     setAadhaarFile(file.name);
+    setAadhaarFileObj(file);
     setAadhaarState('processing');
     setError('');
     try {
@@ -100,10 +105,40 @@ export default function OCRStep({ partnerIndex, totalPartners, initial, onDone }
 
   const handlePAN = async (file: File) => {
     setPanFile(file.name);
+    setPanFileObj(file);
     setPanState('processing');
     setError('');
     try {
       const extracted = await ocrPAN(file);
+      setData(d => ({ ...d, ...extracted }));
+      setPanState('done');
+    } catch {
+      setPanState('error');
+      setError('Could not read PAN. Please try a clearer image.');
+    }
+  };
+
+  // Per-document re-ocr actions
+  const handleAadhaarRescan = async () => {
+    if (!aadhaarFileObj) return;
+    setAadhaarState('processing');
+    setError('');
+    try {
+      const extracted = await ocrAadhaar(aadhaarFileObj);
+      setData(d => ({ ...d, ...extracted }));
+      setAadhaarState('done');
+    } catch {
+      setAadhaarState('error');
+      setError('Could not read Aadhaar. Please try a clearer image.');
+    }
+  };
+
+  const handlePANRescan = async () => {
+    if (!panFileObj) return;
+    setPanState('processing');
+    setError('');
+    try {
+      const extracted = await ocrPAN(panFileObj);
       setData(d => ({ ...d, ...extracted }));
       setPanState('done');
     } catch {
@@ -136,12 +171,20 @@ export default function OCRStep({ partnerIndex, totalPartners, initial, onDone }
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
         <UploadCard
           label="Aadhaar Card" icon="🪪" state={aadhaarState}
-          fileName={aadhaarFile} onFile={handleAadhaar}
+          fileName={aadhaarFile} onFile={(f) => {
+            setAadhaarFile(f.name);
+            setAadhaarFileObj(f);
+            handleAadhaar(f);
+          }}
           hint="Front side (JPG / PNG)"
         />
         <UploadCard
           label="PAN Card" icon="📋" state={panState}
-          fileName={panFile} onFile={handlePAN}
+          fileName={panFile} onFile={(f) => {
+            setPanFile(f.name);
+            setPanFileObj(f);
+            handlePAN(f);
+          }}
           hint="Front side (JPG / PNG)"
         />
       </div>
@@ -151,6 +194,18 @@ export default function OCRStep({ partnerIndex, totalPartners, initial, onDone }
           ⚠️ {error}
         </div>
       )}
+
+      {/* Per-document Re-OCR controls (if files are uploaded) */}
+      <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', margin: '6px 0 12px' }}>
+        <button onClick={handleAadhaarRescan} disabled={!aadhaarFileObj}
+          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2a3560', background: aadhaarFileObj ? '#1d4ed8' : '#ccc', color: '#fff', cursor: aadhaarFileObj ? 'pointer' : 'not-allowed' }}>
+          Re-OCR Aadhaar
+        </button>
+        <button onClick={handlePANRescan} disabled={!panFileObj}
+          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2a3560', background: panFileObj ? '#1d4ed8' : '#ccc', color: '#fff', cursor: panFileObj ? 'pointer' : 'not-allowed' }}>
+          Re-OCR PAN
+        </button>
+      </div>
 
       {/* Editable fields */}
       <div style={{ background: '#ffffff', borderRadius: '14px', padding: '20px', border: '1px solid #e2e8f0', marginBottom: '20px' }}>

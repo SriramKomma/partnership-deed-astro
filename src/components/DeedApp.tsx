@@ -40,8 +40,8 @@ const emptyPartner = (): Partner => ({
   capitalContribution: '', profitShare: '',
 });
 
-// ─── Deed Preview ─────────────────────────────────────────────────────────────
-
+  // ─── Deed Preview ─────────────────────────────────────────────────────────────
+ 
 function hl(val: string): React.CSSProperties {
   return val ? {} : { background: '#fff3cd', borderRadius: '2px', padding: '0 2px' };
 }
@@ -49,7 +49,7 @@ function ph(val: string, label: string) { return val || `[${label}]`; }
 
 const partyLabels = ['First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth'];
 
-function DeedPreview({ data: d }: { data: DeedData }) {
+function DeedPreview({ data: d, onUpdate, editable }: { data: DeedData; onUpdate?: (idx: number, field: string, value: string) => void; editable?: boolean; }) {
   const pg: React.CSSProperties = { fontFamily: 'Verdana, Geneva, sans-serif', fontSize: '10.5px', lineHeight: 1.75, color: '#000', padding: '56px 72px 72px 60px', background: '#fff' };
   const cl: React.CSSProperties = { display: 'flex', gap: '10px', marginBottom: '11px', alignItems: 'flex-start', textAlign: 'justify' };
   const b: React.CSSProperties = { fontWeight: 'bold' };
@@ -67,22 +67,43 @@ function DeedPreview({ data: d }: { data: DeedData }) {
       </div>
       {ps.length === 0
         ? <div style={{ background: '#fff3cd', padding: '10px', borderRadius: '4px', marginBottom: '12px', fontSize: '10px' }}>[Partner details will appear as you answer the questions →]</div>
-        : ps.map((p, i) => (
-          <div key={i}>
-            <div style={{ marginBottom: '6px', display: 'flex', gap: '10px' }}>
-              <span style={b}>{i + 1}.</span>
-              <span>
-                <span style={{ ...b, ...hl(p.fullName) }}>{ph(p.fullName,`Partner ${i+1}`)}</span> S/O{' '}
-                <span style={hl(p.fatherName)}>{ph(p.fatherName,"Father's Name")}</span> Aged{' '}
-                <span style={hl(p.age)}>{ph(p.age,'Age')}</span> Years, residing at{' '}
-                <span style={hl(p.address)}>{ph(p.address,'Address')}</span>.
-              </span>
-            </div>
-            <div style={{ paddingLeft: '220px', marginBottom: '14px' }}>
-              (Hereinafter called as the &ldquo;<span style={{ ...b, color: '#006666' }}>{partyLabels[i] || `${i+1}th`} party</span>&rdquo;)
-            </div>
-          </div>
-        ))
+        : ps.map((p, i) => {
+            if (!editable) {
+              return (
+                <div key={i}>
+                  <div style={{ marginBottom: '6px', display: 'flex', gap: '10px' }}>
+                    <span style={b}>{i + 1}.</span>
+                    <span>
+                      <span style={{ ...b, ...hl(p.fullName) }}>{ph(p.fullName,`Partner ${i+1}`)}</span> S/O{' '}
+                      <span style={hl(p.fatherName)}>{ph(p.fatherName,"Father's Name")}</span> Aged{' '}
+                      <span style={hl(p.age)}>{ph(p.age,'Age')}</span> Years, residing at{' '}
+                      <span style={hl(p.address)}>{ph(p.address,'Address')}</span>.
+                    </span>
+                  </div>
+                  <div style={{ paddingLeft: '220px', marginBottom: '14px' }}>
+                    (Hereinafter called as the &ldquo;<span style={{ ...b, color: '#006666' }}>{partyLabels[i] || `${i+1}th`} party</span>&rdquo;)
+                  </div>
+                </div>
+              );
+            }
+            // Editable mode: render inputs for core fields
+            return (
+              <div key={i} style={{ marginBottom: '12px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={b}>{i + 1}.</span>
+                  <span>
+                    <input value={p.fullName} onChange={e => onUpdate?.(i, 'fullName', e.target.value)} style={Object.assign({},{ padding:'2px 6px', borderRadius: '4px', border: '1px solid #ccc' })} />
+                    {' '}S/O{' '}
+                    <input value={p.fatherName} onChange={e => onUpdate?.(i, 'fatherName', e.target.value)} style={{ padding:'2px 6px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    {' '}Aged{' '}
+                    <input value={p.age} onChange={e => onUpdate?.(i, 'age', e.target.value)} style={{ padding:'2px 6px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                    {' '}Years, residing at{' '}
+                    <input value={p.address} onChange={e => onUpdate?.(i, 'address', e.target.value)} style={{ padding:'2px 6px', borderRadius: '4px', border: '1px solid #ccc' }} />
+                  </span>
+                </div>
+              </div>
+            );
+          })
       }
       <div style={{ marginBottom: '10px', textAlign: 'justify' }}>
         WHEREAS the parties have mutually decided to start a partnership business of{' '}
@@ -155,6 +176,17 @@ export default function DeedApp() {
   const [ocrMode, setOcrMode] = useState<'AADHAAR' | 'PAN' | null>(null);
   const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  // Preview editing toggle and handler
+  const [previewEditable, setPreviewEditable] = useState(false);
+  const handlePreviewUpdate = (idx: number, field: string, value: string) => {
+    setData(prev => {
+      const pts = [...prev.partners];
+      const p = pts[idx] ? { ...pts[idx] } : emptyPartner();
+      (p as any)[field] = value;
+      pts[idx] = p;
+      return { ...prev, partners: pts };
+    });
+  };
 
   // Advance to next step given current step and number of partners
   const nextStep = useCallback((cur: Step, numPartners: number): Step => {
@@ -597,6 +629,23 @@ export default function DeedApp() {
               style={{ background: iframeUrl ? '#1d4ed8' : '#ccc', color: '#fff', border: 'none', borderRadius: '7px', padding: '8px 14px', cursor: iframeUrl ? 'pointer' : 'not-allowed', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.4px' }}>
               📝 DOCX
             </button>
+          </div>
+        </div>
+        {/* Inline editable preview (optional) — A4 format */}
+        <div style={{ borderTop: '1px solid #ddd', background: '#b8b8b8', overflowY: 'auto', maxHeight: '60vh' }}>
+          {/* Toolbar row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#fff', borderBottom: '1px solid #eee' }}>
+            <div style={{ fontWeight: 700, fontSize: '12px', color: '#1a1a2e' }}>📄 Inline Preview</div>
+            <button onClick={() => setPreviewEditable(v => !v)}
+              style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #2a3560', background: previewEditable ? '#1d4ed8' : '#e2e8f0', color: previewEditable ? '#fff' : '#111', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
+              {previewEditable ? '✏️ Editing ON' : '✏️ Enable Editing'}
+            </button>
+          </div>
+          {/* A4 paper card */}
+          <div style={{ padding: '20px', display: 'flex', justifyContent: 'center' }}>
+            <div style={{ width: '794px', minHeight: '1123px', background: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,0.25)', padding: '72px 72px 90px 72px', boxSizing: 'border-box' }}>
+              <DeedPreview data={data} onUpdate={handlePreviewUpdate} editable={previewEditable} />
+            </div>
           </div>
         </div>
         {/* iframe preview */}
