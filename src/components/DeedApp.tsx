@@ -404,16 +404,57 @@ export default function DeedApp() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  const handleDownload = () => {
-    const el = document.getElementById('deed-content');
-    if (!el) return;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Partnership Deed - M/s. ${data.businessName}</title>
-<style>body{margin:0;background:#fff;} span[style*="fff3cd"]{background:none!important;}</style></head>
-<body>${el.innerHTML}</body></html>`;
-    const blob = new Blob([html], { type: 'text/html' });
+  // ── Live iframe preview state ──
+  const [iframeUrl, setIframeUrl] = useState<string>('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const refreshPreview = useCallback(async (d: DeedData) => {
+    if (d.partners.length === 0) return;
+    setPreviewLoading(true);
+    try {
+      const res = await fetch('/api/render-deed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deedData: d }),
+      });
+      const { html } = await res.json();
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      setIframeUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
+    } catch { /* silent */ }
+    setPreviewLoading(false);
+  }, []);
+
+  // Refresh preview whenever deed data changes
+  useEffect(() => { refreshPreview(data); }, [data, refreshPreview]);
+
+  const handleDownloadPDF = async () => {
+    const res = await fetch('/api/download-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deedData: data }),
+    });
+    if (!res.ok) { alert('PDF generation failed. Please try again.'); return; }
+    const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `Partnership_Deed_${(data.businessName || 'Firm').replace(/\s+/g,'_')}.html`;
+    a.href = url;
+    a.download = `Deed_${(data.businessName || 'Firm').replace(/\s+/g,'_')}.pdf`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadDOCX = async () => {
+    const res = await fetch('/api/download-docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deedData: data }),
+    });
+    if (!res.ok) { alert('DOCX generation failed. Please try again.'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Deed_${(data.businessName || 'Firm').replace(/\s+/g,'_')}.docx`;
     a.click(); URL.revokeObjectURL(url);
   };
 
@@ -536,25 +577,41 @@ export default function DeedApp() {
 
       {/* ── RIGHT PREVIEW PANEL ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ background: '#fff', borderBottom: '1px solid #ddd', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+        {/* Toolbar */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #ddd', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#1a1a2e' }}>📄 Live Document Preview</span>
-            <span style={{ fontSize: '10px', color: '#888', background: '#f5f5f5', padding: '2px 10px', borderRadius: '10px', border: '1px solid #e0e0e0' }}>Updates in real-time</span>
-            {data.partners.length > 0 && (
+            {previewLoading && <span style={{ fontSize: '10px', color: '#888', background: '#f5f5f5', padding: '2px 10px', borderRadius: '10px', border: '1px solid #e0e0e0' }}>Refreshing…</span>}
+            {!previewLoading && data.partners.length > 0 && (
               <span style={{ fontSize: '10px', color: PRIMARY, background: 'rgba(1,51,76,0.08)', padding: '2px 10px', borderRadius: '10px', fontWeight: 600 }}>
                 {data.partners.length} Partner{data.partners.length > 1 ? 's' : ''}
               </span>
             )}
           </div>
-          <button onClick={handleDownload}
-            style={{ background: '#1a1a2e', color: '#d4a843', border: 'none', borderRadius: '7px', padding: '8px 16px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.4px' }}>
-            ⬇ Download Deed
-          </button>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '28px', background: '#ccc' }}>
-          <div style={{ background: '#fff', boxShadow: '0 8px 32px rgba(0,0,0,0.18)', maxWidth: '800px', margin: '0 auto', minHeight: '1050px' }}>
-            <div id="deed-content"><DeedPreview data={data} /></div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={handleDownloadPDF} disabled={!iframeUrl}
+              style={{ background: iframeUrl ? '#b91c1c' : '#ccc', color: '#fff', border: 'none', borderRadius: '7px', padding: '8px 14px', cursor: iframeUrl ? 'pointer' : 'not-allowed', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.4px' }}>
+              📄 PDF
+            </button>
+            <button onClick={handleDownloadDOCX} disabled={!iframeUrl}
+              style={{ background: iframeUrl ? '#1d4ed8' : '#ccc', color: '#fff', border: 'none', borderRadius: '7px', padding: '8px 14px', cursor: iframeUrl ? 'pointer' : 'not-allowed', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.4px' }}>
+              📝 DOCX
+            </button>
           </div>
+        </div>
+        {/* iframe preview */}
+        <div style={{ flex: 1, overflow: 'hidden', background: '#ccc', display: 'flex', alignItems: 'stretch' }}>
+          {iframeUrl ? (
+            <iframe
+              src={iframeUrl}
+              style={{ flex: 1, border: 'none', background: '#fff' }}
+              title="Partnership Deed Preview"
+            />
+          ) : (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: '13px' }}>
+              Your deed will appear here as you answer the questions.
+            </div>
+          )}
         </div>
       </div>
     </div>
