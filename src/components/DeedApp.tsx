@@ -631,23 +631,6 @@ export default function DeedApp() {
             </button>
           </div>
         </div>
-        {/* Inline editable preview (optional) — A4 format */}
-        <div style={{ borderTop: '1px solid #ddd', background: '#b8b8b8', overflowY: 'auto', maxHeight: '60vh' }}>
-          {/* Toolbar row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#fff', borderBottom: '1px solid #eee' }}>
-            <div style={{ fontWeight: 700, fontSize: '12px', color: '#1a1a2e' }}>📄 Inline Preview</div>
-            <button onClick={() => setPreviewEditable(v => !v)}
-              style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #2a3560', background: previewEditable ? '#1d4ed8' : '#e2e8f0', color: previewEditable ? '#fff' : '#111', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
-              {previewEditable ? '✏️ Editing ON' : '✏️ Enable Editing'}
-            </button>
-          </div>
-          {/* A4 paper card */}
-          <div style={{ padding: '20px', display: 'flex', justifyContent: 'center' }}>
-            <div style={{ width: '794px', minHeight: '1123px', background: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,0.25)', padding: '72px 72px 90px 72px', boxSizing: 'border-box' }}>
-              <DeedPreview data={data} onUpdate={handlePreviewUpdate} editable={previewEditable} />
-            </div>
-          </div>
-        </div>
         {/* iframe preview */}
         <div style={{ flex: 1, overflow: 'hidden', background: '#ccc', display: 'flex', alignItems: 'stretch' }}>
           {iframeUrl ? (
