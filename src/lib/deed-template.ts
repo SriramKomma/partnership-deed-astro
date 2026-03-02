@@ -187,7 +187,7 @@ export function renderDeed(data: DeedData): string {
 <div class="a4-page">
 
 <!-- ── TITLE ── -->
-<p lang="en-US" align="center" style="line-height: 100%; margin-bottom: 0in; margin-top: 2in">
+<p lang="en-US" align="center" style="line-height: 100%; margin-bottom: 0in; margin-top: 0">
   <u><b><font face="Verdana, sans-serif"><font size="2" style="font-size: 11pt">PARTNERSHIP DEED</font></font></b></u>
 </p>
 <p lang="en-US" align="justify" style="line-height: 100%; margin-bottom: 0in"><br/></p>
