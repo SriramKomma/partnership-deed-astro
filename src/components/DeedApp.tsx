@@ -90,24 +90,61 @@ function DeedPreview({ data: d }: { data: DeedData }) {
       <div style={{ marginBottom: '20px', textAlign: 'justify' }}>AND WHEREAS it is felt expedient to reduce the terms and conditions into writing to avoid any misunderstandings.</div>
       <div style={{ textAlign: 'center', ...bu, marginBottom: '20px', fontSize: '14px' }}>NOW THIS DEED OF PARTNERSHIP WITNESSETH AS FOLLOWS:</div>
 
-      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>1)</span><div style={{ flex: 1 }}>The partnership shall be carried on as <span style={b}>M/s. <span style={hl(d.businessName)}>{ph(d.businessName, 'Firm Name')}</span></span> from <span style={{ ...b, ...hl(d.durationStartDate) }}>{ph(d.durationStartDate, 'Start Date')}</span>. Duration: {d.durationType || 'AT WILL'} of the partners.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>2)</span><div style={{ flex: 1 }}>The <span style={b}>principal place of business</span> shall be at <span style={hl(d.registeredAddress)}>{ph(d.registeredAddress, 'Registered Address')}</span>.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>3)</span><div style={{ flex: 1 }}>The <span style={b}>objective of partnership</span>: <span style={hl(d.businessObjective)}>{ph(d.businessObjective, 'Business Objectives')}</span></div></div>
-      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>4)</span><div style={{ flex: 1 }}>
-        <span style={b}>Capital Contribution:</span><br />
-        {ps.length === 0 ? <span style={hl('')}>[Partner capital details]</span>
-          : ps.map((p, i) => <span key={i}>&bull; <span style={{ ...b, ...hl(p.fullName) }}>{ph(p.fullName, `P${i + 1}`)}</span>: <span style={hl(p.capitalContribution)}>{ph(p.capitalContribution, '%')}</span>%<br /></span>)}
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>1)</span><div style={{ flex: 1, textAlign: 'justify' }}>The partnership business shall be carried on under the name and style as <span style={b}>M/s. <span style={hl(d.businessName)}>{ph(d.businessName, 'Firm Name')}</span></span>. The partnership firm shall come into existence with effect from <span style={{ ...b, ...hl(d.durationStartDate) }}>{ph(d.durationStartDate, 'Start Date')}</span>.<br/><br/>{d.durationType === 'AT WILL' ? 'The duration of the firm shall be at WILL of the partners.' : `The partnership firm shall come into existence from ${ph(d.durationStartDate, 'Start Date')}.`}</div></div>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>2)</span><div style={{ flex: 1, textAlign: 'justify' }}>The <span style={b}>Principal place of business</span> of the firm shall be at <span style={hl(d.registeredAddress)}>{ph(d.registeredAddress, 'Registered Address')}</span>.</div></div>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>3)</span><div style={{ flex: 1, textAlign: 'justify' }}>The <span style={b}>objective of partnership</span> is to carry on the following business:<br/><br/><div style={{ paddingLeft: '20px' }}>a. <span style={hl(d.businessObjective)}>{ph(d.businessObjective, 'Business Objectives')}</span></div></div></div>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>4)</span><div style={{ flex: 1, textAlign: 'justify' }}>
+        <span style={b}>Capital Contribution of the Partners:</span><br /><br />
+        <div style={{ paddingLeft: '20px' }}>
+          The total capital contribution of the partners in the firm shall be in the following proportions:<br />
+          {ps.length === 0 ? <span><span style={hl('')}>[Partner capital details]</span><br/></span>
+            : ps.map((p, i) => <span key={i}>&bull; {partyLabels[i] || `${i + 1}th`} Party (<span style={{ ...b, ...hl(p.fullName) }}>{ph(p.fullName, `P${i + 1}`)}</span>): <span style={hl(p.capitalContribution)}>{ph(p.capitalContribution, '%')}</span>%<br /></span>)}
+        </div>
       </div></div>
-      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>5)</span><div style={{ flex: 1 }}>
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>5)</span><div style={{ flex: 1, textAlign: 'justify' }}>
+        The parties of the{' '}
         {managers.length > 0
-          ? <>{managers.map((p, i) => <span key={i}><span style={{ ...b, ...hl(p.fullName), color: ACCENT }}>{ph(p.fullName, `Manager`)}</span>{i < managers.length - 1 ? ' & ' : ''}</span>)} shall be the <span style={b}>managing partner(s)</span> authorized to manage all business affairs.</>
+          ? <>{managers.map((p, i) => <span key={i}><span style={{ ...b, ...hl(p.fullName), color: ACCENT }}>{ph(p.fullName, `Manager`)}</span>{i < managers.length - 1 ? ' & ' : ''}</span>)} shall be the <span style={b}>managing partner's</span> and is authorized and empowered to do the following acts, deeds and things on behalf of the firm:</>
           : <span style={hl('')}>[Managing partners to be selected]</span>}
+        <br/><br/>
+        <div style={{ paddingLeft: '20px' }}>
+          a. To manage the business of the partnership firm with a power to appoint remuneration, etc. They shall also have the power to dispense with the service of such personnel that are not required.<br/>
+          b. To negotiate any business transactions and enter into agreements on behalf of the firm and to enter into all/any contracts and sub-contracts on either way. To enter to the sale and purchase agreements relating to the objective of the business.<br/>
+          c. To enter into correspondence with government departments, quasi-govt departments, public and private organizations, individuals, etc regarding the partnership business.<br/>
+          d. To incur all expenses necessary for the conduct of the business.<br/>
+          e. To borrow moneys against credit of partnership, if necessary by hypothecating or creating a charge upon the assets of the partnership.<br/>
+          f. To be in custody of all account books, documents, negotiable instruments and all other documents pertaining to the business.<br/>
+          g. To look after the proper upkeep of books of accounts required for the business and to supervise the same at regular intervals.<br/>
+          h. To open bank account/accounts in the name of the partnership firm.<br/>
+          i. To put all the monies, cheques etc., which are not immediately required for the conduct of the business into the bank account, opened for the Partnership business.<br/>
+          j. To do all other acts and things that are necessary for carrying on the business.<br/>
+          k. The managing partner's are empowered to borrow money as and when found necessary for the business from any nationalized or schedule bank/banks or any other financial institutions from time to time and execute necessary actions at all the times.
+        </div>
       </div></div>
-      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>6)</span><div style={{ flex: 1 }}>Banking accounts shall be operated by:{' '}{bankers.length > 0 ? bankers.map((p, i) => <span key={i}><span style={{ ...b, ...hl(p.fullName), color: ACCENT }}>{ph(p.fullName, 'Bank Partner')}</span>{i < bankers.length - 1 ? ' and ' : ''}</span>) : <span style={hl('')}>[Bank authorized partners]</span>}.</div></div>
-      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>7)</span><div style={{ flex: 1 }}>Profit/Loss shares:<br />
-        {ps.length === 0 ? <span style={hl('')}>[Partner profit shares]</span>
-          : ps.map((p, i) => <span key={i} style={b}>{i + 1}. <span style={hl(p.fullName)}>{ph(p.fullName, `P${i + 1}`)}</span> — <span style={hl(p.profitShare)}>{ph(p.profitShare, '%')}</span>%<br /></span>)}
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>6)</span><div style={{ flex: 1, textAlign: 'justify' }}>The firm shall maintain one or more banking accounts (e.g., current accounts, overdrafts, cash credit, etc.) as may be decided by the partners from time to time. The said bank accounts shall be operated jointly by{' '}{bankers.length > 0 ? bankers.map((p, i) => <span key={i}>the Party of the "<span style={{ ...b, ...hl(p.fullName), color: ACCENT }}>{partyLabels[i] || `${i+1}th`} Part," {ph(p.fullName, 'Bank Partner')}</span>{i < bankers.length - 1 ? ', and ' : ''}</span>) : <span style={hl('')}>[Bank authorized partners]</span>}. The signatures of all authorized partners shall be jointly required for the issuance and authorization of cheques or any other banking transactions. No transaction shall be deemed valid unless signed by all authorized partners.</div></div>
+      
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>7)</span><div style={{ flex: 1, textAlign: 'justify' }}>The partners, upon mutual consent of all the partners of this partnership deed appoint any another individual as the authorized signatory for entering into the agreements relating to sale and purchase of the land or/and building.</div></div>
+      
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>8)</span><div style={{ flex: 1, textAlign: 'justify' }}>That all the partners shall be working partners of the firm and shall be bound to devote full time and attention to the partnership business and shall be actively engaged in conducting the affairs of the firm and therefore it has been agreed to pay salary/remuneration for the services rendered as per the provisions under section 40(b) of the income tax Act, 1961.<br/><br/><div style={{ paddingLeft: '20px' }}>For the purpose of above calculation of the remuneration shall be on the basis of profit as shown by the books and computed as provided in section 20 to 44 D of chapter IV of the income Tax Act, 1961 as increased by the aggregate of remuneration paid or payable to the partners of the firm if such remuneration has been deducted while computing the net profit.<br/><br/>That the interest at the rate of 12% per annum or as may be prescribed u/s.40(b)(iv) of the Income Tax Act, 1961 or may be any other applicable provisions as may be in force in the Income tax assessment of partnership firm for the relevant accounting year shall be payable to the partners on the amount standing to the credit of the account of the partners. Such interest shall be calculated and credited to the account of each partner at the close of the accounting year.</div></div></div>
+      
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>9)</span><div style={{ flex: 1, textAlign: 'justify' }}>The books of accounts of the partnership shall be maintained at the principal place of business and the same shall be closed on the 31st of march every year to arrive at the profit or loss for the period ending and to draw the profit and loss account and the balance sheet to know the financial position of the firm as on date.</div></div>
+      
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>10)</span><div style={{ flex: 1, textAlign: 'justify' }}>That the share of the profits or losses of partnership business after taking into account all business and incidental expenses will be as follows:<br /><br />
+        <div style={{ paddingLeft: '20px' }}>
+          {ps.length === 0 ? <span><span style={hl('')}>[Partner profit shares]</span><br/></span>
+            : ps.map((p, i) => <span key={i}><span style={b}>{i + 1}. <span style={hl(p.fullName)}>{ph(p.fullName, `P${i + 1}`)}</span> &nbsp;&nbsp;&nbsp; - <span style={hl(p.profitShare)}>{ph(p.profitShare, '%')}</span>%</span><br /></span>)}
+        </div>
       </div></div>
+
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>11)</span><div style={{ flex: 1, textAlign: 'justify' }}>Any partner desirous of retiring from the partnership during its continuance can exercise his / her right by giving three calendar months' notice to the other partner.</div></div>
+      
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>12)</span><div style={{ flex: 1, textAlign: 'justify' }}>Death, retirement or insolvency of any of the partners shall not to dissolve the partnership. Further in case of death of any of the partners of the firm, the legal heirs as the case may be, shall be entitled to the capital account balance with the share of profit or loss up to the date of death of the partner only. The goodwill of the partnership business shall not be valued in the above circumstances.</div></div>
+      
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>13)</span><div style={{ flex: 1, textAlign: 'justify' }}>Any dispute that may arise between the partners shall be referred to an arbitrator whose award shall be final and binding on the parties <span style={b}>MUTTATIS MUTANDIS</span>. The appointment of the arbitrator shall be on mutual consent.</div></div>
+      
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>14)</span><div style={{ flex: 1, textAlign: 'justify' }}>The provision of the partnership Act 1932 as in vogue time to time shall apply to this partnership except as otherwise stated above.</div></div>
+      
+      <div style={cl}><span style={{ minWidth: '26px', fontWeight: 600 }}>15)</span><div style={{ flex: 1, textAlign: 'justify' }}>Any of the terms of this Deed may be amended, abandoned or otherwise be dealt with according to the necessities of the business and convenience of the partners and they shall be reduced to writing on Rs. 100/- stamp paper which shall have the same effect as if embodied in this Deed.</div></div>
 
       <div style={{ marginTop: '40px', marginBottom: '40px', textAlign: 'justify' }}>
         IN WITNESS WHEREOF the parties have set their hands on this the <span style={{ ...b, ...hl(d.executionDate) }}>{ph(d.executionDate, 'Deed Date')}</span>.
@@ -257,27 +294,10 @@ export default function DeedApp() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  // ── Live iframe preview state ──
-  const [iframeUrl, setIframeUrl] = useState<string>('');
-  const [previewLoading, setPreviewLoading] = useState(false);
+  // ── Live React Document Preview ──
+  // The document updates instantly as data changes via DeedPreview native component.
+  // There is no network delay, preventing flicker.
 
-  const refreshPreview = useCallback(async (d: DeedData) => {
-    setPreviewLoading(true);
-    try {
-      const res = await fetch('/api/render-deed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deedData: d }),
-      });
-      const { html } = await res.json();
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      setIframeUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
-    } catch { /* silent */ }
-    setPreviewLoading(false);
-  }, []);
-
-  useEffect(() => { refreshPreview(data); }, [data, refreshPreview]);
 
   const handleDownloadPDF = async () => {
     const res = await fetch('/api/download-pdf', {
@@ -402,20 +422,20 @@ export default function DeedApp() {
             <span style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '20px' }}>📄</span> Document Live Preview
             </span>
-            {previewLoading && <span style={{ fontSize: '11px', color: '#64748b', background: '#f1f5f9', padding: '4px 12px', borderRadius: '12px', fontWeight: 600, border: '1px solid #e2e8f0' }}>Syncing...</span>}
-            {!previewLoading && isComplete && (
+            {/* No preview loading state needed since UI is natively reactive */}
+            {!isComplete && (
               <span style={{ fontSize: '12px', color: '#16a34a', background: '#dcfce7', padding: '4px 12px', borderRadius: '12px', fontWeight: 600, border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ width: '6px', height: '6px', background: '#16a34a', borderRadius: '50%' }}></span> Ready to Download
               </span>
             )}
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button onClick={handleDownloadPDF} disabled={!iframeUrl}
-              style={{ background: iframeUrl ? '#ef4444' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px', cursor: iframeUrl ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s', boxShadow: iframeUrl ? `0 4px 12px rgba(239, 68, 68, 0.3)` : 'none' }}>
+            <button onClick={handleDownloadPDF}
+              style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s', boxShadow: `0 4px 12px rgba(239, 68, 68, 0.3)` }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Download PDF
             </button>
-            <button onClick={handleDownloadDOCX} disabled={!iframeUrl}
-              style={{ background: iframeUrl ? '#2563eb' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px', cursor: iframeUrl ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s', boxShadow: iframeUrl ? `0 4px 12px rgba(37, 99, 235, 0.3)` : 'none' }}>
+            <button onClick={handleDownloadDOCX}
+              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s', boxShadow: `0 4px 12px rgba(37, 99, 235, 0.3)` }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Download DOCX
             </button>
           </div>
@@ -427,12 +447,8 @@ export default function DeedApp() {
             @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { to { transform: rotate(360deg); } }
     `}</style>
-          <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', height: '100%', minHeight: '800px', background: '#ffffff', borderRadius: '12px', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-            {iframeUrl ? (
-              <iframe src={iframeUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="Preview" />
-            ) : (
-              <DeedPreview data={data} />
-            )}
+          <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', height: '100%', minHeight: '800px', background: '#ffffff', borderRadius: '12px', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', overflowY: 'auto' }}>
+            <DeedPreview data={data} />
           </div>
         </div>
       </div>

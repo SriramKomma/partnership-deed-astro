@@ -314,7 +314,7 @@ INSTRUCTION: You MUST now reply to the user. Briefly acknowledge the data they j
 
     return new Response(JSON.stringify({
       content: finalContent,
-      extractedData,
+      extractedData: currentDeedData, // Replaced raw parsed tool args with the fully merged state
       missingFields // Return the latest missing fields strictly
     }), {
       status: 200,
