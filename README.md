@@ -1,95 +1,71 @@
-# Partnership Deed Generator — Astro
+# Partnership Deed AI Generator
 
-A conversational AI-powered agent that guides users through filling in a Partnership Deed. Chat on the left, live document preview on the right.
+A conversational AI-powered agent that guides users through drafting a legally compliant Partnership Deed (Indian Law). Features a split-screen interface with a conversational AI chat on the left and a live, dynamically updating document preview on the right.
 
-## Tech Stack
-- **Framework**: Astro 4 with SSR (Node adapter)
-- **UI**: React 18 components (TypeScript)
-- **AI**: Groq API (`llama-3.3-70b-versatile`) for conversational guidance
-- **Database**: Supabase (auto-saves completed deeds)
-- **Styling**: Inline CSS (no build-time dependencies)
+![Mobile Responsive UI](https://via.placeholder.com/800x400?text=Partnership+Deed+AI)
 
-## Quick Start
+## ✨ Features
+- **Conversational Drafting**: Interactive AI chat asks for necessary details (names, addresses, capital, ratios).
+- **Aadhaar & PAN OCR**: Automatically extracts partner details by uploading images/PDFs of KYC documents.
+- **Auto-Generated Objectives**: AI natively drafts comprehensive business objectives based on the firm's name and industry.
+- **Live Document Preview**: Watch the HTML document populate in real-time as you answer questions.
+- **Export to PDF & DOCX**: One-click downloads with perfectly formatted, legally styled structures and paragraph numbering.
+- **Mobile Responsive**: Elegantly collapses into a stacked 100vh layout with sticky controls for smartphones and tablets.
+
+## 🛠 Tech Stack
+- **Framework**: Next.js 14 (App Router)
+- **UI**: React 18, Custom Inline CSS
+- **AI & OCR**: Google Gemini API (`gemini-2.5-flash`)
+- **Document Generation**: `puppeteer` (PDF), `html-to-docx` (DOCX)
+- **Validation**: Zod (Structured JSON generation)
+
+## 🚀 Quick Start
 
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Environment variables are pre-configured in .env
-#    Edit .env if you need to update any API keys
+# 2. Add your Gemini API key to your local environment
+echo "GEMINI_API_KEY=your_gemini_api_key_here" > .env.local
 
-# 3. Run development server
+# 3. Run the development server
 npm run dev
 
 # 4. Open http://localhost:3000
 ```
 
-## Build for Production
-
-```bash
-npm run build
-npm run preview
-# or start the Node server directly:
-node dist/server/entry.mjs
-```
-
-## Project Structure
+## 📂 Project Structure
 
 ```
 partnership-deed-astro/
+├── app/
+│   ├── layout.tsx              # Next.js Application wrapper
+│   ├── page.tsx                # Main entry point (loads DeedApp)
+│   └── api/                    # Next.js Route Handlers
+│       ├── chat/route.ts       # Structured logic step generator
+│       ├── chat-ai/route.ts    # AI conversational responses
+│       ├── ocr/route.ts        # Aadhaar/PAN image extraction
+│       ├── render-deed/route.ts# HTML Live Preview compiler
+│       ├── download-pdf/route.ts # Puppeteer PDF generator
+│       └── download-docx/route.ts # DOCX document generator
 ├── src/
-│   ├── components/
-│   │   └── DeedApp.tsx         # Main React component (chat + preview)
-│   ├── layouts/
-│   │   └── Layout.astro        # HTML shell
-│   └── pages/
-│       ├── index.astro         # Main page
-│       └── api/
-│           ├── chat.ts         # Groq AI endpoint
-│           └── save-deed.ts    # Supabase save endpoint
-├── .env                        # All API keys (pre-configured)
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+│   └── components/
+│       ├── DeedApp.tsx         # Main React application shell
+│       ├── DeedPreview.tsx     # Read-only document display
+│       └── OCRStep.tsx         # File upload handling logic
+└── lib/
+    ├── ai-service.ts           # Gemini schema and prompt logic
+    ├── gemini.ts               # Gemini client initialization
+    └── deed-template.ts        # Source-of-truth HTML layout
 ```
 
-## API Endpoints
-
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/api/chat` | POST | Sends user answer to Groq, returns next question |
-| `/api/save-deed` | POST | Saves completed deed to Supabase |
-
-## Supabase Setup
-
-Create a table in your Supabase project:
-
-```sql
-CREATE TABLE partnership_deeds (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  business_name text,
-  partner1_name text,
-  partner2_name text,
-  deed_data jsonb,
-  created_at timestamptz DEFAULT now()
-);
-```
-
-## Download the Deed
-
-Click **⬇ Download Deed** after answering all questions. The downloaded `.html` file can be opened in any browser and printed as PDF via **File → Print → Save as PDF**.
-
-## Environment Variables
+## 🔒 Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `GROQ_API_KEY` | Groq API key for LLM |
-| `VERCEL_AI_API_KEY` | Vercel AI API key (backup) |
-| `AI_MODEL` | AI model identifier |
-| `PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
-| `MSG91_AUTHKEY` | MSG91 SMS auth key |
-| `MSG91_TEMPLATE_ID` | MSG91 SMS template |
-| `MSG91_SENDER_ID` | MSG91 sender ID |
-| `MSG91_COUNTRY_CODE` | SMS country code |
+| `GEMINI_API_KEY` | **Required**. Google Gemini key for Chat, Document Logic, and Vision OCR. |
+| `NEXT_PUBLIC_SUPABASE_URL` | *(Optional)* Client-side Supabase URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | *(Optional)* Client-side Supabase Anon Key |
+
+## 📄 License
+MIT License.
