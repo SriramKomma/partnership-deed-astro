@@ -322,14 +322,14 @@ export default function DeedApp() {
 
   useEffect(() => { refreshPreview(data); }, [data, refreshPreview]);
 
-  const handleDownloadPDF = async () => {
-    const res = await fetch('/api/download-pdf', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deedData: data }),
-    });
-    if (!res.ok) { alert('PDF generation failed.'); return; }
-    const url = URL.createObjectURL(await res.blob());
-    const a = document.createElement('a'); a.href = url; a.download = `Partnership_Deed.pdf`; a.click(); URL.revokeObjectURL(url);
+  const handleDownloadPDF = () => {
+    const iframe = document.querySelector('iframe');
+    if (iframe && iframe.contentWindow) {
+      // Trigger the browser's highly-optimized native PDF generator
+      iframe.contentWindow.print();
+    } else {
+      alert('Preview is still loading...');
+    }
   };
 
   const handleDownloadDOCX = async () => {
