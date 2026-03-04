@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
-import { ocrAadhaar, ocrPAN } from '../lib/ocr';
-import type { PartnerOCR } from '../lib/ocr';
+import { ocrAadhaar, ocrPAN } from '../../lib/ocr';
+import type { PartnerOCR } from '../../lib/ocr';
 
 interface Props {
   partnerIndex: number;

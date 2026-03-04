@@ -1,6 +1,6 @@
-import type { APIRoute } from 'astro';
-import { renderDeed } from '../../lib/deed-template';
-import type { DeedData } from '../../lib/deed-template';
+import { NextResponse } from 'next/server';
+import { renderDeed } from '../../../lib/deed-template';
+import type { DeedData } from '../../../lib/deed-template';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 /* ────────────────────────────────────────────────
@@ -29,16 +29,13 @@ function getSupabase(): SupabaseClient | null {
    Route
 ──────────────────────────────────────────────── */
 
-export const POST: APIRoute = async ({ request }) => {
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
+    const body = await req.json();
     const deedData: DeedData | undefined = body?.deedData;
 
     if (!deedData) {
-      return new Response(
-        JSON.stringify({ error: 'Missing deedData' }),
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing deedData' }, { status: 400 });
     }
 
     // Render exact HTML template
@@ -54,18 +51,9 @@ export const POST: APIRoute = async ({ request }) => {
       })();
     }
 
-    return new Response(
-      JSON.stringify({ html }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    return NextResponse.json({ html }, { status: 200 });
 
   } catch (err: any) {
-    return new Response(
-      JSON.stringify({ error: err?.message || 'Server error' }),
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 });
   }
-};
+}

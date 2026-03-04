@@ -173,6 +173,11 @@ export function renderDeed(data: DeedData): string {
       .a4-page { box-shadow: none; margin: 0; padding: 0; width: 100%; }
       .no-print { display: none !important; }
     }
+    @media screen and (max-width: 768px) {
+      body { background: #cbd5e1; padding: 12px; margin: 0; }
+      .a4-page { width: 100%; margin: 0 auto; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); min-height: auto; border-radius: 4px; }
+      .disclaimer { margin-top: 1em; padding: 10px; }
+    }
     .disclaimer {
       margin-top: 2em;
       padding: 0.5em 1em;
@@ -187,9 +192,13 @@ export function renderDeed(data: DeedData): string {
 <div class="a4-page">
 
 <!-- ── TITLE ── -->
-<p lang="en-US" align="center" style="line-height: 100%; margin-bottom: 0in; margin-top: 0">
+<div style="text-align: center; width: 100%;">
+<center>
+<p lang="en-US" align="center" style="line-height: 100%; margin-bottom: 0in; margin-top: 0; text-align: center;">
   <u><b><font face="Verdana, sans-serif"><font size="2" style="font-size: 11pt">PARTNERSHIP DEED</font></font></b></u>
 </p>
+</center>
+</div>
 <p lang="en-US" align="justify" style="line-height: 100%; margin-bottom: 0in"><br/></p>
 
 <!-- ── OPENING PARA ── -->
