@@ -81,22 +81,22 @@ async function fileToBase64(file: File): Promise<{ base64: string; mimeType: str
 // ─── Public OCR functions ─────────────────────────────────────────────────────
 
 export async function ocrAadhaar(file: File): Promise<Partial<PartnerOCR>> {
-  const { base64, mimeType } = await fileToBase64(file);
+  const formData = new FormData();
+  formData.append('file', file);
   const res = await fetch('/api/ocr', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64: base64, mimeType, docType: 'aadhaar' }),
+    body: formData,
   });
   const { data } = await res.json();
   return data as Partial<PartnerOCR>;
 }
 
 export async function ocrPAN(file: File): Promise<Partial<PartnerOCR>> {
-  const { base64, mimeType } = await fileToBase64(file);
+  const formData = new FormData();
+  formData.append('file', file);
   const res = await fetch('/api/ocr', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64: base64, mimeType, docType: 'pan' }),
+    body: formData,
   });
   const { data } = await res.json();
   return data as Partial<PartnerOCR>;

@@ -137,6 +137,8 @@ export default function DeedApp() {
     partners: [], businessObjective: '',
   });
   const [messages, setMessages] = useState<{ role: 'user' | 'bot' | 'system', text: string }[]>([]);
+  // Use a ref so processChat always reads the LATEST messages without stale closure
+  const messagesRef = useRef<{ role: 'user' | 'bot' | 'system', text: string }[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -144,20 +146,29 @@ export default function DeedApp() {
   const [isComplete, setIsComplete] = useState(false);
   const [ocrStatus, setOcrStatus] = useState<string | null>(null);
 
-  const addBot = (text: string) => setMessages(prev => [...prev, { role: 'bot', text }]);
+  const addBot = (text: string) => {
+    const next = [...messagesRef.current, { role: 'bot' as const, text }];
+    messagesRef.current = next;
+    setMessages(next);
+  };
 
   const processChat = async (userText: string, hiddenSystemContext?: string) => {
-    let currentMsgs = [...messages];
+    // Always read from ref to avoid stale closure
+    let currentMsgs = [...messagesRef.current];
     if (userText) {
-      currentMsgs.push({ role: 'user', text: userText });
+      const userMsg = { role: 'user' as const, text: userText };
+      currentMsgs = [...currentMsgs, userMsg];
+      messagesRef.current = currentMsgs;
       setMessages(currentMsgs);
     }
 
     setLoading(true);
     try {
+      // Map to API format. System context is appended as a user message so Gemini
+      // treats it as part of the latest turn (Gemini has no system role).
       const apiMessages = currentMsgs.map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, content: m.text }));
       if (hiddenSystemContext) {
-        apiMessages.push({ role: 'system', content: hiddenSystemContext });
+        apiMessages.push({ role: 'user', content: `[CONTEXT for AI only – do not repeat to user]: ${hiddenSystemContext}` });
       }
 
       const r = await fetch('/api/chat-ai', {
@@ -203,13 +214,13 @@ export default function DeedApp() {
 
         setData(newData);
         
-        // Auto-intercept business objective generation
+        // Auto-generate business objectives ONCE (no recursive processChat call - that caused infinite loop)
         if (newData.businessName && newData.natureOfBusiness && !newData.businessObjective && res.missingFields?.includes("Drafting the Business Objectives (AI can generate this automatically)")) {
-          setLoading(true);
           try {
-             // Let user know AI is doing magic
-             currentMsgs.push({ role: 'bot', text: 'Generating the perfect Business Objectives automatically based on your firm details...' });
-             setMessages([...currentMsgs]);
+             const genMsg = { role: 'bot' as const, text: '✨ Generating Business Objectives automatically for your firm...' };
+             currentMsgs = [...currentMsgs, genMsg];
+             messagesRef.current = currentMsgs;
+             setMessages(currentMsgs);
              
              const objRes = await fetch('/api/chat', {
                method: 'POST',
@@ -218,13 +229,15 @@ export default function DeedApp() {
              });
              const objData = await objRes.json();
              if (objData.content) {
-                newData.businessObjective = objData.content;
-                setData({...newData});
-                // After fetching this automatically, resend to processChat to skip to next field
-                await processChat("AI successfully drafted business objectives. Do NOT ask about it again in the next turn.", hiddenSystemContext);
-                return;
+                newData = { ...newData, businessObjective: objData.content };
+                setData(newData);
+                // Just add a confirmation bot message - do NOT call processChat again
+                const doneMsg = { role: 'bot' as const, text: `✅ Business Objectives drafted and saved! Moving on to the next step.` };
+                currentMsgs = [...currentMsgs, doneMsg];
+                messagesRef.current = currentMsgs;
+                setMessages(currentMsgs);
              }
-          } catch(e) { }
+          } catch(e) { console.error('Objectives generation failed', e); }
         }
       }
 
@@ -239,7 +252,8 @@ export default function DeedApp() {
       }
 
       if (res.content) {
-        currentMsgs.push({ role: 'bot', text: res.content });
+        currentMsgs = [...currentMsgs, { role: 'bot' as const, text: res.content }];
+        messagesRef.current = currentMsgs;
         setMessages(currentMsgs);
       }
     } catch {
@@ -249,10 +263,10 @@ export default function DeedApp() {
   };
 
   useEffect(() => {
-    setMessages([
-      { role: 'bot', text: '✨ Welcome to OnEasy Legal!\n\nI am your AI legal assistant. I will craft a perfect Partnership Deed for you by simply asking a few conversational questions.\n\nLet’s start building your document. Are you ready?' }
-    ]);
-    processChat('', 'The user has just arrived. Greet them with a premium, reassuring tone and tell them we will quickly craft their Partnership Deed. Ask for the Number of Partners to begin.');
+    // Set the initial greeting directly - no API call needed for it
+    const welcomeMsg = { role: 'bot' as const, text: '✨ Welcome to OnEasy Legal!\n\nI am your AI legal assistant. I will craft a perfect Partnership Deed for you by simply asking a few conversational questions.\n\nHow many partners will be in this firm? (Usually 2 or more)' };
+    messagesRef.current = [welcomeMsg];
+    setMessages([welcomeMsg]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -322,9 +336,30 @@ export default function DeedApp() {
 
   useEffect(() => { refreshPreview(data); }, [data, refreshPreview]);
 
-  const handleDownloadPDF = () => {
+  const saveToDatabase = async () => {
+    try {
+      const getCookie = (name: string) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop()?.split(';').shift();
+      };
+      const token = getCookie('sb-access-token');
+      await fetch('/api/render-deed', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ deedData: data, saveToDb: true }),
+      });
+    } catch { /* silent */ }
+  };
+
+  const handleDownloadPDF = async () => {
     const iframe = document.querySelector('iframe');
     if (iframe && iframe.contentWindow) {
+      // Background save to DB
+      await saveToDatabase();
       // Trigger the browser's highly-optimized native PDF generator
       iframe.contentWindow.print();
     } else {
@@ -333,6 +368,9 @@ export default function DeedApp() {
   };
 
   const handleDownloadDOCX = async () => {
+    // Background save to DB
+    await saveToDatabase();
+    
     const res = await fetch('/api/download-docx', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deedData: data }),
